@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wi-Fi Implementation Review — Claude</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --panel-2:#1d2129; --text:#e6e9ef; --muted:#9aa3b2;
+    --accent:#4fc3f7; --ok:#81c784; --warn:#ffb74d; --danger:#e57373; --border:#2a2f3a; --code-bg:#12141a; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f7f8fa; --panel:#fff; --panel-2:#f0f2f5;
+    --text:#1c2129; --muted:#5b6472; --accent:#0277bd; --ok:#2e7d32; --warn:#b26a00; --danger:#c62828;
+    --border:#dde1e8; --code-bg:#eef0f4; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Inter","Segoe UI",system-ui,sans-serif; line-height:1.6; }
+  .wrap { max-width:1000px; margin:0 auto; padding:2.5rem 1.5rem 5rem; }
+  header { border-bottom:1px solid var(--border); padding-bottom:1.5rem; margin-bottom:2rem; }
+  h1 { font-size:2rem; margin:0 0 .4rem; } h1 .accent { color:var(--accent); }
+  .subtitle { color:var(--muted); margin:0; }
+  h2 { font-size:1.4rem; margin:2.6rem 0 1rem; padding-bottom:.4rem; border-bottom:1px solid var(--border); }
+  h2 .num { color:var(--accent); font-weight:700; margin-right:.5rem; }
+  h3 { font-size:1.05rem; margin:1.5rem 0 .5rem; color:var(--accent); }
+  code,pre { font-family:"JetBrains Mono",ui-monospace,monospace; font-size:.87em; }
+  code { background:var(--code-bg); padding:.15em .4em; border-radius:4px; border:1px solid var(--border); }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:1rem; overflow-x:auto; }
+  pre code { background:none; border:none; padding:0; }
+  .table-wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; margin:1rem 0; font-size:.92rem; }
+  th,td { border:1px solid var(--border); padding:.55rem .8rem; text-align:left; vertical-align:top; }
+  th { background:var(--panel-2); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1.1rem 1.3rem; margin:1rem 0; }
+  .card.crit { border-left:4px solid var(--danger); }
+  .card.warn { border-left:4px solid var(--warn); }
+  .card.ok { border-left:4px solid var(--ok); }
+  .tag { display:inline-block; border-radius:4px; padding:0 .5rem; font-size:.72rem; font-weight:700; text-transform:uppercase; margin-right:.4rem; }
+  .tag.blocker { background:rgba(229,115,115,.12); color:var(--danger); border:1px solid var(--danger); }
+  .tag.major { background:rgba(255,183,77,.12); color:var(--warn); border:1px solid var(--warn); }
+  .tag.fixed { background:rgba(129,199,132,.14); color:var(--ok); border:1px solid var(--ok); }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Wi-Fi Implementation Review — <span class="accent">verified against the running device</span></h1>
+  <p class="subtitle">Static review of both codebases plus live testing on the reference S24 Ultra
+  (<code>R5CX30Z3G9J</code>, 10.0.0.4) and CachyOS host (10.0.0.16), 2026-08-10.</p>
+</header>
+
+<h2><span class="num">1.</span>Headline</h2>
+<div class="card ok">
+  <span class="tag fixed">fixed</span><strong>The critical pairing vulnerability from my plan review is genuinely and correctly fixed.</strong>
+  The grindable-SAS flaw is gone, replaced by a correct commit-before-reveal construction. I verified this three
+  independent ways: reading both implementations, confirming cross-language test vectors agree
+  (identical inputs → SAS <code>141454</code> in Kotlin and C++), and an independent agent recomputing the vectors
+  in Python. The old ADB abstract-socket camera-theft path is <strong>deleted outright</strong>, not merely gated —
+  stronger than I recommended.
+</div>
+<div class="card crit">
+  <span class="tag blocker">blocker</span><strong>But the Wi-Fi path does not work end to end.</strong> Pairing fails on
+  real hardware, reproducibly (3/3 attempts). Separately, a file-descriptor double-close in the desktop streaming
+  path would break every stream even if pairing succeeded. The release ledger is honest that every Wi-Fi gate is
+  <code>NOT RUN</code> — this review confirms why that matters: the happy path has never executed.
+</div>
+
+<h2><span class="num">2.</span>What I verified live on the device</h2>
+<div class="table-wrap"><table>
+  <tr><th>Check</th><th>Result</th><th>Evidence</th></tr>
+  <tr><td>Desktop build + tests</td><td><span class="tag fixed">pass</span></td><td>CMake/Ninja clean; 4/4 ctest suites pass</td></tr>
+  <tr><td>Android build + lint + unit tests</td><td><span class="tag fixed">pass</span></td><td>Gradle BUILD SUCCESSFUL</td></tr>
+  <tr><td>Cross-language SAS vector</td><td><span class="tag fixed">pass</span></td><td>Same inputs → <code>141454</code> both languages; genuine interop vector</td></tr>
+  <tr><td>mDNS discovery (S24 → Avahi)</td><td><span class="tag fixed">pass</span></td><td><code>_openlens._tcp</code> resolved on 10.0.0.4; <strong>flips a NOT RUN gate</strong></td></tr>
+  <tr><td>TXT record contents</td><td><span class="tag fixed">pass</span></td><td><code>v=2 id=&lt;uuid&gt; tls=1 busy=0 pair=1</code>; default name is generic <em>"OpenLens phone"</em>, not personal</td></tr>
+  <tr><td>Permissions minimised</td><td><span class="tag fixed">pass</span></td><td>Only CAMERA, INTERNET, FOREGROUND_SERVICE, FOREGROUND_SERVICE_CAMERA — no <code>connectedDevice</code>, no location</td></tr>
+  <tr><td>Desktop dedupes duplicate services</td><td><span class="tag fixed">pass</span></td><td><code>openlens devices</code> collapsed two registrations to one device id</td></tr>
+  <tr><td>Unpaired client rejected</td><td><span class="tag fixed">pass</span></td><td><code>openlens start</code> → "no paired OpenLens phone was found"</td></tr>
+  <tr><td><strong>End-to-end pairing</strong></td><td><span class="tag blocker">FAIL</span></td><td>3/3 attempts failed — see §3</td></tr>
+  <tr><td>Advertising stops when app not visible</td><td><span class="tag major">FAIL</span></td><td>Listener + <code>pair=1</code> stayed live backgrounded <em>and</em> with screen off — see §4.1</td></tr>
+</table></div>
+
+<h2><span class="num">3.</span>Blocker: pairing fails on real hardware</h2>
+<p>Reproduced three times, including immediately after a fresh app launch (so the 120 s pairing window was open) with
+both devices on the same /24 and the app in the foreground.</p>
+<pre><code>desktop: openlens: secure connection to the phone failed:
+         error:0A000126:SSL routines::unexpected eof while reading
+
+phone UI: Read error: ssl=0xb4000072ddeacf18: I/O error during system call, Try again</code></pre>
+<p><strong>Diagnosis:</strong> both error strings reference a live <code>ssl=</code> handle and a <em>read</em>, so the
+mutual TLS handshake completes and the failure is in the application exchange that follows. Both endpoints block
+reading, the phone's socket read times out (<code>EAGAIN</code> → "Try again"), it closes, and the desktop then sees
+EOF. That is the signature of a <strong>deadlock in the greeting / <code>PAIR1</code> step</strong>, not a crypto
+failure — the commitment logic is never reached.</p>
+<p>Worth checking first: the desktop writes the greeting <code>"PAIR 2\n"</code> then immediately blocks reading
+<code>PAIR1</code> (<code>wifi_transport.cpp:420-421</code>); the phone reads the greeting and is expected to send
+<code>PAIR1</code> (<code>WifiHostController.kt:251-303</code>). Confirm the phone actually reaches the send — the
+most likely culprits are the greeting line never satisfying the phone's line reader, or the phone waiting on a UI/arm
+condition before replying. Instrumenting both sides with a byte-level trace will localise it in minutes.</p>
+<p class="muted">No app-level exception appears in logcat; the error is caught and surfaced to the UI, which is good
+error handling — but it means the stack trace is lost. Consider logging the caught exception at
+<code>WifiHostController.kt:277</code>.</p>
+
+<h2><span class="num">4.</span>Major findings</h2>
+
+<h3>4.1 Pairing/listening is tied to activity lifetime, not visibility <span class="tag major">major</span></h3>
+<p>The plan requires (its §5.4, §7.2) that the phone advertise and accept pairing <em>only while the pairing UI is
+visible</em>. I measured the opposite: with the app backgrounded (launcher resumed) <strong>and the screen off</strong>,
+the phone continued advertising <code>pair=1</code> and its TLS listener still accepted connections. Root cause
+(confirmed statically): the controller is created in <code>onCreate</code> and lives to <code>onDestroy</code>, and
+<code>pairingWindowDeadline</code> is set at construction — so it is bound to activity <em>lifetime</em>, not
+<code>onStart</code>/<code>onStop</code>.</p>
+<p>Impact is bounded — pairing still needs on-phone confirmation, so this is not remote camera access — but the TLS
+handshake, pairing state machine and protocol parser stay exposed to the whole LAN while the user believes the app is
+closed, and the documented threat model is wrong. Move start/stop to <code>onStart</code>/<code>onStop</code>.</p>
+<p>A corollary bug: because the window is armed once at construction and never re-armed, pairing becomes impossible
+120 s after launch with no recovery except restarting the activity.</p>
+
+<h3>4.2 File-descriptor double-close breaks every stream <span class="tag blocker">blocker</span></h3>
+<p><code>ConnectedTls</code> (<code>wifi_transport.cpp:195-208</code>) declares a destructor that unconditionally
+<code>::close(descriptor)</code> but defaults its move constructor, which <em>copies</em> the <code>int</code> without
+resetting the source. <code>connect_wifi_stream</code> (<code>:469</code>) moves the object twice, so two objects
+destruct holding the same live fd. Consequences: the socket is closed before the caller reads (instant
+"disconnect"), and the released fd number can be reused by another thread while <code>SSL</code> still writes to it.
+Fix: reset <code>other.descriptor = -1</code> in a hand-written move, or wrap the fd in a move-aware type.</p>
+
+<h3>4.3 Permissive TLS trust is not scoped to the pairing window <span class="tag major">major</span></h3>
+<p>Both sides use one permissive TLS context for every connection — desktop
+<code>SSL_CTX_set_verify(..., SSL_VERIFY_NONE, ...)</code> (<code>wifi_transport.cpp:191</code>) serving both pairing
+and normal sessions; Android a single <code>X509TrustManager</code> that accepts any non-empty chain
+(<code>WifiHostController.kt:136-142</code>). <strong>Authentication is still correct</strong> — both enforce the
+pinned SPKI with a constant-time compare immediately after the handshake, and I found no path where a normal session
+accepts an unpinned certificate. But the design called for a separate strict context, and the Android
+<code>checkServerTrusted</code> is an empty method: currently unreachable (the phone never acts as a TLS client), yet
+it becomes critical the moment anyone uses that context for an outbound socket. Make it throw.</p>
+
+<h3>4.4 Pairing denial-of-service <span class="tag major">major</span></h3>
+<p>Android: on desktop cancel/disconnect the confirmation wait can stall the full 30 s (up to ~60 s total) while
+holding <code>pairingInProgress</code>; with a 5-attempt cap in a 120 s window, an attacker who connects and
+immediately cancels can consume the entire pairing window. Desktop: no overall pairing deadline at all — the
+per-syscall timeout plus byte-at-a-time reads (<code>ssl_read_line</code>) let a peer dribble one byte every 44 s and
+hold the thread indefinitely; there is also no confirm timeout and no attempt cap.</p>
+
+<h3>4.5 All five ADB-era defects are still present <span class="tag major">major</span></h3>
+<p>These survived the migration unchanged in <code>session.cpp</code>/<code>media.cpp</code>:</p>
+<ul>
+  <li>Error paths skip <code>END_STREAM</code> and <code>sink.stop()</code> (leaks on the GUI's long-lived sink).</li>
+  <li>Sink exceptions counted as <code>decode_errors</code>, hiding V4L2 failures.</li>
+  <li><strong>Missing <code>AV_INPUT_BUFFER_PADDING_SIZE</code></strong> — FFmpeg may over-read up to 64 bytes past an
+  attacker-controlled buffer. This is the one memory-safety issue and should be fixed regardless of anything else.</li>
+  <li><code>VIDEO_CONFIG</code> still fed as a frame packet instead of extradata (the startup decode errors).</li>
+  <li><code>AV_CODEC_FLAG_LOW_DELAY</code> / <code>thread_count</code> set after <code>avcodec_open2</code> — no-ops,
+  so the low-latency decode configuration is not actually in effect.</li>
+</ul>
+
+<h2><span class="num">5.</span>Minor</h2>
+<ul>
+  <li><code>busy</code> is hard-coded to <code>"0"</code> in the TXT record and never updated, though the desktop reads it.</li>
+  <li>Desktop private key is created world-readable and <code>chmod</code>ed to 0600 afterwards — small but real window. Use <code>open(..., 0600)</code>.</li>
+  <li>Peer file has no <code>fsync</code> before rename; a crash can silently unpair every device, which downgrades to a fresh trust-on-first-use prompt.</li>
+  <li>The pairing confirm dialog shows only the code — no device name or id — so a rogue device advertising a victim's <code>id</code> silently overwrites the stored pin if the user confirms.</li>
+  <li>The stable <code>id</code> UUID is broadcast in cleartext on every network joined — a durable cross-network tracking beacon. Consider rotating or advertising only while foregrounded.</li>
+  <li><code>POST_NOTIFICATIONS</code> is not requested, so the foreground-service notification (the user-visible "camera is live" signal) can be suppressed on Android 13+.</li>
+  <li>Release build has no R8/minification; <code>Log.e</code> with exception detail ships.</li>
+  <li>Stale UI string "Dropped before USB"; stale <code>usbStatus_</code> identifier in the GUI.</li>
+  <li>I observed a transient duplicate mDNS registration (two live listeners, same device id, ports 35399 + 39943). I could not reproduce it by re-launching, so I report it as observed-but-unexplained rather than a confirmed leak. The CLI deduped correctly.</li>
+</ul>
+
+<h2><span class="num">6.</span>Recommended order of work</h2>
+<ol>
+  <li><strong>Root-cause the pairing deadlock (§3)</strong> — nothing else can be validated until the happy path runs.</li>
+  <li><strong>Fix the fd double-close (§4.2)</strong> — streaming cannot work without it.</li>
+  <li><strong>Fix the FFmpeg padding over-read (§4.5)</strong> — memory safety on attacker-controlled input.</li>
+  <li>Move advertising/pairing to <code>onStart</code>/<code>onStop</code> and make the window re-armable (§4.1).</li>
+  <li>Add pairing deadlines/attempt caps on the desktop; fix the Android confirmation stall (§4.4).</li>
+  <li>Split strict vs permissive TLS contexts; make <code>checkServerTrusted</code> throw (§4.3).</li>
+  <li>Then re-run the physical gates — discovery already passes, so pairing → stream → OBS is the remaining chain.</li>
+</ol>
+<p class="muted" style="margin-top:2.5rem;border-top:1px solid var(--border);padding-top:1rem">
+Reviewed by Claude, 2026-08-10. Static review of both codebases plus live device testing. The pairing crypto
+redesign is correct; the integration around it is not yet working.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "device": "/dev/video42",
+  "width": 1280,
+  "height": 720,
+  "requested_fps": 30,
+  "frames_read_per_format": 90,
+  "formats": [
+    {
+      "ffmpeg_pixel_format": "yuv420p",
+      "v4l2_fourcc": "YU12",
+      "passed": true
+    },
+    {
+      "ffmpeg_pixel_format": "nv12",
+      "v4l2_fourcc": "NV12",
+      "passed": true
+    },
+    {
+      "ffmpeg_pixel_format": "yuyv422",
+      "v4l2_fourcc": "YUYV",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenLens Implementation &amp; Verification Handoff</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06110d;
+      --panel: #0d2119;
+      --panel-2: #102a20;
+      --line: #294b3d;
+      --text: #ecfff6;
+      --muted: #9bbcab;
+      --green: #38d996;
+      --amber: #f3c969;
+      --red: #ff8078;
+      --blue: #75bfff;
+      --code: #071913;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top right, #123628 0, var(--bg) 35rem);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 80px; }
+    header, section {
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      margin: 0 0 20px;
+      padding: 24px;
+      box-shadow: 0 18px 55px rgba(0,0,0,.22);
+    }
+    header { padding: 32px; }
+    h1, h2, h3 { line-height: 1.2; margin-top: 0; }
+    h1 { font-size: clamp(2rem, 5vw, 3.6rem); margin-bottom: 8px; }
+    h2 { font-size: 1.55rem; color: #bff5dc; }
+    h3 { color: #a6d9c2; margin-top: 28px; }
+    p:last-child { margin-bottom: 0; }
+    a { color: #8ed0ff; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    code { color: #b8f4d9; overflow-wrap: anywhere; }
+    pre {
+      margin: 12px 0;
+      padding: 16px;
+      overflow: auto;
+      border: 1px solid #244536;
+      border-radius: 12px;
+      background: var(--code);
+      color: #dfffee;
+      white-space: pre-wrap;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { border-bottom: 1px solid var(--line); padding: 11px 10px; text-align: left; vertical-align: top; }
+    th { color: #bcebd5; background: rgba(255,255,255,.025); }
+    tr:last-child td { border-bottom: 0; }
+    ul, ol { padding-left: 24px; }
+    li + li { margin-top: 7px; }
+    .subtitle { color: var(--muted); font-size: 1.1rem; margin: 0 0 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill, .status {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: var(--panel-2);
+      color: #bfe9d6;
+      font-size: .86rem;
+      font-weight: 700;
+    }
+    .pass { color: var(--green); }
+    .warn { color: var(--amber); }
+    .fail { color: var(--red); }
+    .info { color: var(--blue); }
+    .callout {
+      border-left: 4px solid var(--green);
+      border-radius: 10px;
+      padding: 13px 16px;
+      background: rgba(56,217,150,.08);
+      margin: 14px 0;
+    }
+    .callout.warn { border-left-color: var(--amber); background: rgba(243,201,105,.08); color: var(--text); }
+    .callout.security { border-left-color: var(--blue); background: rgba(117,191,255,.08); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 14px; }
+    .card { border: 1px solid var(--line); background: var(--panel-2); border-radius: 13px; padding: 16px; }
+    .card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+    .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: stretch; }
+    .flow > div { position: relative; border: 1px solid var(--line); background: var(--panel-2); border-radius: 12px; padding: 14px; text-align: center; }
+    .flow > div:not(:last-child)::after { content: "→"; position: absolute; right: -17px; top: 35%; color: var(--green); font-size: 1.3rem; z-index: 2; }
+    .small { color: var(--muted); font-size: .9rem; }
+    .toc { columns: 2; column-gap: 32px; }
+    .toc li { break-inside: avoid; }
+    .checklist li { list-style: "☐  "; padding-left: 4px; }
+    .hash { font-size: .82rem; word-break: break-all; }
+    @media (max-width: 850px) {
+      .flow { grid-template-columns: 1fr; }
+      .flow > div:not(:last-child)::after { content: "↓"; right: auto; left: 49%; top: auto; bottom: -22px; }
+      .toc { columns: 1; }
+      table { display: block; overflow-x: auto; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: white; color: #111; }
+      main { width: 100%; padding: 0; }
+      header, section, .card { background: white; color: #111; box-shadow: none; break-inside: avoid; }
+      code, pre { color: #111; background: #f5f5f5; }
+      h2, h3, th, .subtitle, .small { color: #333; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="meta">
+      <span class="pill">OpenLens 0.1.0-dev</span>
+      <span class="pill">Verification handoff</span>
+      <span class="pill">Generated 2026-08-09</span>
+    </div>
+    <h1>OpenLens implementation handoff</h1>
+    <p class="subtitle">A self-contained account of what was built, changed, installed, tested, and still needs independent confirmation.</p>
+    <div class="callout">
+      <strong>Current demonstrated workflow:</strong> with the S24 Ultra connected by an authorized USB-debugging connection and unlocked, clicking <strong>Start camera</strong> in OpenLens Desktop launches the phone app, starts Camera2/MediaCodec automatically without a per-session phone tap, transports H.264 over a private ADB-forwarded socket, decodes it on Linux, and writes frames to the OpenLens V4L2/OBS path.
+    </div>
+    <p><strong>Repository:</strong> <code>/home/qasim/Dev/openlens</code><br>
+       <strong>Reference device:</strong> Samsung Galaxy S24 Ultra, ADB serial <code>R5CX30Z3G9J</code><br>
+       <strong>Reference host:</strong> CachyOS Linux, Qt 6 desktop, OBS 32, <code>/dev/video42</code></p>
+  </header>
+
+  <section id="toc">
+    <h2>Contents</h2>
+    <ol class="toc">
+      <li><a href="#reviewer">Instructions for the reviewing agent</a></li>
+      <li><a href="#outcome">Outcome and user workflow</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#components">Implemented components</a></li>
+      <li><a href="#fixes">Important fixes and product decisions</a></li>
+      <li><a href="#security">Security and privacy behavior</a></li>
+      <li><a href="#evidence">Build and live-device evidence</a></li>
+      <li><a href="#artifacts">Installed and packaged artifacts</a></li>
+      <li><a href="#verify">Independent verification procedure</a></li>
+      <li><a href="#limits">Known limitations and uncompleted release gates</a></li>
+      <li><a href="#files">Key source files</a></li>
+      <li><a href="#acceptance">Recommended acceptance checklist</a></li>
+    </ol>
+  </section>
+
+  <section id="reviewer">
+    <h2>1. Instructions for the reviewing agent</h2>
+    <p>Do not treat this report as proof by itself. Inspect the named files, rebuild from source, run the automated tests, compare the packaged hashes, and repeat the physical S24/OBS tests. Report discrepancies rather than silently correcting this document.</p>
+    <div class="grid">
+      <div class="card"><h3>Confirm code</h3><p>Review Android activity/service lifecycle, protocol framing, desktop session ownership, V4L2 output, Qt GUI, and OBS plugin registration.</p></div>
+      <div class="card"><h3>Confirm behavior</h3><p>Start from the PC without touching the unlocked phone, rotate the phone, stop from the PC, reconnect USB, and verify OBS receives the expected source.</p></div>
+      <div class="card"><h3>Confirm claims</h3><p>Separate implemented features from measured gates. Do not upgrade a NOT RUN row to PASS without retained evidence.</p></div>
+    </div>
+  </section>
+
+  <section id="outcome">
+    <h2>2. Outcome and intended user workflow</h2>
+    <ol>
+      <li>One-time setup: install the Android app, grant Android camera permission, authorize the computer for USB debugging, install OpenLens Desktop/OBS integration, and prepare <code>/dev/video42</code>.</li>
+      <li>Connect the S24 Ultra with a USB data cable and leave it unlocked.</li>
+      <li>Open <strong>OpenLens</strong> from the Linux application menu.</li>
+      <li>Choose quality and camera settings, then click <strong>Start camera</strong> on the PC.</li>
+      <li>The desktop creates a random per-session socket name, forwards it over ADB, launches the Android activity, and the phone starts the foreground camera service automatically. There is no per-session phone confirmation button.</li>
+      <li>Use the OpenLens V4L2 device or native OpenLens source in OBS.</li>
+      <li>Click <strong>Stop camera</strong> on the PC to release Camera2, MediaCodec, the local socket, ADB forward, decoder, and virtual camera. The phone notification also retains an emergency Stop action.</li>
+    </ol>
+    <div class="callout warn"><strong>Boundary:</strong> the secure phone lock screen is not bypassed. The current product requires the phone to be unlocked when starting a new session. Android’s one-time camera permission and one-time USB-debugging authorization are still required.</div>
+  </section>
+
+  <section id="architecture">
+    <h2>3. Architecture</h2>
+    <div class="flow" aria-label="OpenLens data flow">
+      <div><strong>S24 Camera2</strong><br><span class="small">Camera frames and controls</span></div>
+      <div><strong>MediaCodec</strong><br><span class="small">Hardware H.264 encoder</span></div>
+      <div><strong>ADB USB socket</strong><br><span class="small">Random abstract socket → loopback forward</span></div>
+      <div><strong>Desktop core</strong><br><span class="small">Protocol parser + FFmpeg decoder</span></div>
+      <div><strong>OBS output</strong><br><span class="small">V4L2 <code>/dev/video42</code> or native source</span></div>
+    </div>
+    <h3>Control flow</h3>
+    <p>The desktop is the session owner. It discovers the ADB device, checks app installation, creates the forward, launches the Android activity with the random session and preset, connects, performs HELLO/CAPABILITIES/CONFIGURE, sends camera controls, receives video/config/stat/error messages, and sends END_STREAM during orderly shutdown.</p>
+    <h3>Transport properties</h3>
+    <ul>
+      <li>No LAN transport and no Android network permission.</li>
+      <li>ADB forwards a random Android abstract socket only to host loopback.</li>
+      <li>Binary framed protocol has Kotlin and C++ implementations plus shared valid/malformed fixtures.</li>
+      <li>Video payload is H.264; desktop output is decoded I420 suitable for OBS/V4L2.</li>
+    </ul>
+  </section>
+
+  <section id="components">
+    <h2>4. Implemented components</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Implemented</th><th>Primary location</th></tr></thead>
+      <tbody>
+        <tr><td>Android application</td><td>Jetpack Compose UI, camera permission, auto-start from desktop request, foreground service, notification/Stop action, preview, state/stats display.</td><td><code>android/app</code></td></tr>
+        <tr><td>Camera module</td><td>Camera2 enumeration, certified 1080p30/720p30 presets, capture session, rear/front selection, zoom, exposure, torch, tap focus, stabilization when supported.</td><td><code>android/camera</code></td></tr>
+        <tr><td>Encoder module</td><td>Hardware AVC/H.264 MediaCodec surface encoder and encoded access-unit callbacks.</td><td><code>android/encoder</code></td></tr>
+        <tr><td>Android protocol</td><td>Wire types, headers, serializer, incremental parser, flags and malformed-input handling.</td><td><code>android/protocol</code></td></tr>
+        <tr><td>Desktop core</td><td>ADB discovery/forward management, session handshake/reconnect, parser, FFmpeg H.264 decode, transforms and sinks.</td><td><code>desktop/core</code></td></tr>
+        <tr><td>Diagnostic CLI</td><td>Doctor/devices/probe/receive/start/synthetic-style workflows for development and automation.</td><td><code>desktop/cli</code></td></tr>
+        <tr><td>Desktop GUI</td><td>Qt 6 readiness cards, device/settings controls, Start/Stop, live preview, frame statistics, OBS launch, plugin install/repair and tray behavior.</td><td><code>desktop/gui</code></td></tr>
+        <tr><td>V4L2 integration</td><td>I420 virtual-camera output to <code>/dev/video42</code>, including synthetic smoke path and disconnect slate.</td><td><code>desktop/core/src/sinks.cpp</code></td></tr>
+        <tr><td>Native OBS plugin</td><td>OpenLens Phone Camera source with settings, async I420 frames and source lifecycle management.</td><td><code>desktop/obs</code></td></tr>
+        <tr><td>Protocol specification</td><td>Versioned protocol document, changelog, valid fixtures and malformed fixtures.</td><td><code>protocol</code></td></tr>
+        <tr><td>Packaging</td><td>Application-menu entry, icon, per-user installer/uninstaller, OBS installer/uninstaller, developer bundle, SHA-256 manifest and SPDX JSON.</td><td><code>packaging</code>, <code>scripts</code>, <code>artifacts/dev</code></td></tr>
+        <tr><td>Project governance</td><td>GPL-2.0-or-later licensing, notices, contribution/security/code-of-conduct documents and CI definitions.</td><td>repository root, <code>.github</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="fixes">
+    <h2>5. Important fixes and product decisions</h2>
+    <h3>5.1 Product naming</h3>
+    <p>Earlier development naming using <code>phonecam</code> was replaced with <strong>OpenLens</strong> across binaries, UI, package IDs where applicable, desktop entry, icon, OBS integration, documentation and developer bundle. The packaging script explicitly removes an obsolete <code>phonecam</code> artifact if present.</p>
+
+    <h3>5.2 Stale Android socket/session replacement</h3>
+    <p>A foreground service could remain blocked on <code>LocalServerSocket.accept()</code> for an old random session while the desktop forwarded a new random session. This made the UI appear stuck.</p>
+    <ul>
+      <li><code>CameraStreamingService</code> now tracks <code>activeSession</code> and <code>pendingSession</code> under <code>sessionLock</code>.</li>
+      <li>A new request closes the active client, wakes the old abstract socket with a temporary <code>LocalSocket</code>, closes the old server, and chains into the replacement session.</li>
+      <li><code>MainActivity</code> compares its requested session with the active service session so stale service state cannot show an incorrect Stop-only UI.</li>
+    </ul>
+
+    <h3>5.3 Phone approval UI and later PC-controlled auto-start</h3>
+    <p>The first UI fix moved a full-width Start button above the preview so it was visible in landscape. The subsequent product decision removed per-session phone approval entirely:</p>
+    <ul>
+      <li>A Compose <code>LaunchedEffect(sessionName, permissionGranted)</code> waits for the preview surface, then calls <code>startSession()</code> automatically for a new desktop request.</li>
+      <li>The manual Start button and its callback were removed from the session screen.</li>
+      <li>The desktop now says the camera is starting automatically rather than asking for phone approval.</li>
+      <li>One-time Android camera permission and USB-debugging authorization remain.</li>
+    </ul>
+
+    <h3>5.4 Rotation stopping the stream</h3>
+    <p>Rotating from landscape to portrait recreated the activity and destroyed the <code>TextureView</code> surface used by the active Camera2 capture session. The activity now handles <code>keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize</code> configuration changes itself. Compose relayouts without destroying the activity/camera surface.</p>
+
+    <h3>5.5 Secure lock-screen boundary</h3>
+    <p>An experiment to show the activity above the lock screen was not retained or installed. The final source and installed APK do <strong>not</strong> declare <code>showWhenLocked</code>. New sessions require an unlocked phone, while no per-session tap is required once unlocked.</p>
+  </section>
+
+  <section id="security">
+    <h2>6. Security and privacy behavior</h2>
+    <div class="callout security">
+      <strong>Trust model:</strong> an ADB-authorized computer is highly trusted and may start an OpenLens camera session while the phone is unlocked. This is now intentional product behavior. The camera is never silently hidden: Android’s privacy indicator and foreground notification remain active.
+    </div>
+    <table>
+      <thead><tr><th>Control</th><th>Current behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Android camera permission</td><td>Required once through the standard Android permission dialog.</td></tr>
+        <tr><td>USB-debugging authorization</td><td>Required once per trusted computer through Android’s RSA authorization prompt.</td></tr>
+        <tr><td>Per-session phone approval</td><td>Removed. PC Start launches and starts OpenLens automatically on an unlocked phone.</td></tr>
+        <tr><td>Secure lock screen</td><td>Not bypassed or covered. The phone must be unlocked for a new session.</td></tr>
+        <tr><td>Camera visibility</td><td>Android camera privacy indicator, persistent foreground-service notification and phone-side Stop action.</td></tr>
+        <tr><td>Networking</td><td>No Android network permission; no account, cloud, Wi-Fi fallback, telemetry or advertising.</td></tr>
+        <tr><td>Socket exposure</td><td>Random per-session abstract socket; ADB forward bound to desktop loopback.</td></tr>
+        <tr><td>Support output</td><td>Probe/support output is designed to omit full serials, frames and absolute ADB paths.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="evidence">
+    <h2>7. Build and live-device evidence</h2>
+    <h3>7.1 Android verification</h3>
+    <pre>JAVA_HOME=/home/qasim/.jdks/jdk-21.0.11+10 ./gradlew \
+  :app:assembleDebug \
+  :app:lintDebug \
+  :camera:testDebugUnitTest \
+  :protocol:testDebugUnitTest
+
+Result: BUILD SUCCESSFUL
+183 actionable tasks: 12 executed, 171 up-to-date</pre>
+    <p>The verified APK was installed on <code>R5CX30Z3G9J</code> with <code>adb install -r</code>, returning <code>Success</code>.</p>
+
+    <h3>7.2 Desktop verification</h3>
+    <pre>./scripts/build-desktop.sh
+
+desktop_gui_smoke .... Passed
+obs_plugin_smoke ..... Skipped (environment-dependent loader smoke)
+protocol_tests ....... Passed
+core_tests ........... Passed
+
+100% tests passed, 0 tests failed out of 4
+3 tests passed; 1 explicitly skipped</pre>
+
+    <h3>7.3 No-touch S24 live run</h3>
+    <p>After the phone was unlocked, a five-second receive test was initiated entirely from the PC. Nobody tapped the phone. The Android app auto-started, streamed, received END_STREAM and released its foreground service and ADB forward.</p>
+    <pre>Starting OpenLens on the phone over the authorized USB connection.
+frames=126 messages=138 sequence_gaps=2 decode_errors=2 bytes=3730698
+
+Post-test Android service state: nothing
+Post-test adb forward list: empty</pre>
+    <p class="small">Two initial FFmpeg <code>no frame!</code> messages corresponded to the two reported decode errors. This did not prevent 126 frames from decoding, but the reviewer should investigate or establish an acceptable startup-error policy before release.</p>
+
+    <h3>7.4 Rotation evidence status</h3>
+    <p>The activity lifecycle fix is present, builds cleanly, and the user reported the behavior was “better” after installation. A retained automated test proving uninterrupted frame sequence through repeated physical landscape/portrait rotations has not yet been recorded. Treat that as a validation task, not a completed release gate.</p>
+
+    <h3>7.5 Previously recorded development evidence</h3>
+    <ul>
+      <li>Cross-language protocol fixtures: PASS.</li>
+      <li>C++ warning-clean build: PASS with <code>-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror</code>.</li>
+      <li>ASan/UBSan protocol/core tests: PASS locally with LSan disabled because of sandbox ptrace restrictions.</li>
+      <li>Synthetic I420 to <code>/dev/video42</code>: PASS.</li>
+      <li>Native OBS module build/load/source registration: PASS on installed OBS 32.2.1.</li>
+      <li>Qt desktop GUI build/startup and desktop entry validation: PASS.</li>
+      <li>APK has no Android network permission: PASS.</li>
+    </ul>
+  </section>
+
+  <section id="artifacts">
+    <h2>8. Installed and packaged artifacts</h2>
+    <h3>8.1 Installed locations</h3>
+    <table>
+      <thead><tr><th>Artifact</th><th>Location / identity</th></tr></thead>
+      <tbody>
+        <tr><td>Android debug app</td><td>Package <code>dev.openlens.app</code>, version <code>0.1.0-dev</code>, installed on the S24 Ultra.</td></tr>
+        <tr><td>Desktop GUI</td><td><code>/home/qasim/.local/bin/openlens-desktop</code></td></tr>
+        <tr><td>Application menu entry</td><td><code>/home/qasim/.local/share/applications/dev.openlens.OpenLens.desktop</code></td></tr>
+        <tr><td>Desktop icon</td><td><code>/home/qasim/.local/share/icons/hicolor/scalable/apps/openlens.svg</code></td></tr>
+        <tr><td>Bundled OBS module for repair/install</td><td><code>/home/qasim/.local/share/openlens/openlens-obs.so</code></td></tr>
+        <tr><td>Developer bundle</td><td><code>/home/qasim/Dev/openlens/artifacts/dev/openlens-0.1.0-dev</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.2 Developer bundle hashes</h3>
+    <table>
+      <thead><tr><th>File</th><th>SHA-256</th></tr></thead>
+      <tbody class="hash">
+        <tr><td>GPL-2.0-or-later.txt</td><td><code>aaf135472f81c5b4a0dca9367e5bb5e9750032b5bebe5442b36e4c0a47430df3</code></td></tr>
+        <tr><td>LICENSE</td><td><code>0728c263b665454ed59bd6f1bf9e9e135fe5ff33916b17d0d3c5f1ffe10039ba</code></td></tr>
+        <tr><td>NOTICE</td><td><code>a984b44aef5c0c777b0c185441df0724665111c8267182df466b43d1bc92d295</code></td></tr>
+        <tr><td>dev.openlens.OpenLens.desktop</td><td><code>48671c8e79629636ec0554b0d7ff056a8845f918f1f2b928fa512758ef976702</code></td></tr>
+        <tr><td>openlens</td><td><code>1da2c0c8fac31cc2ffcf5726de977656964aa4db9be3696ac29f845da2b529e9</code></td></tr>
+        <tr><td>openlens-debug.apk</td><td><code>007548bbf9faa2b4a85af683bb80bd9b778d6bf5a649b9e8995d432377c6af20</code></td></tr>
+        <tr><td>openlens-desktop</td><td><code>1a6b8e7d7a4832611d34f0e1d218f151313c97e10510a3b510fdd4409f215fe4</code></td></tr>
+        <tr><td>openlens-obs.so</td><td><code>58daa4b35e33ba1c0f29baa94ca0393d383ae7c370f67b638c614bc2ed747dc2</code></td></tr>
+        <tr><td>openlens.svg</td><td><code>6e82ba83782c47cdce2b1bacdfa76155e44b0002a36e1c147a579103f6ae757d</code></td></tr>
+      </tbody>
+    </table>
+    <p><code>sha256sum -c SHA256SUMS</code> returned OK for every listed file. The bundle also contains <code>openlens.spdx.json</code>. It is a debug/developer bundle, not a signed public release.</p>
+  </section>
+
+  <section id="verify">
+    <h2>9. Independent verification procedure</h2>
+    <h3>9.1 Static review</h3>
+    <ol class="checklist">
+      <li>Confirm no remaining runtime product name is <code>phonecam</code>.</li>
+      <li>Confirm <code>AndroidManifest.xml</code> has the orientation <code>configChanges</code> values and does not contain <code>showWhenLocked</code>.</li>
+      <li>Confirm <code>MainActivity</code> auto-starts a new valid session after permission and preview readiness, with no manual per-session Start action.</li>
+      <li>Confirm stale-session replacement safely wakes/closes the old abstract socket before opening the new one.</li>
+      <li>Confirm all Android foreground camera-service requirements and notification behavior for target SDK 36.</li>
+      <li>Confirm the Android manifest contains no network permission.</li>
+      <li>Audit parsing, maximum payload rules, unknown required messages, sequence accounting and reconnect behavior.</li>
+      <li>Audit V4L2 format negotiation and OBS async-frame lifetime/ownership.</li>
+    </ol>
+
+    <h3>9.2 Rebuild</h3>
+    <pre>cd /home/qasim/Dev/openlens/android
+JAVA_HOME=/home/qasim/.jdks/jdk-21.0.11+10 ./gradlew \
+  :app:assembleDebug :app:lintDebug \
+  :camera:testDebugUnitTest :protocol:testDebugUnitTest
+
+cd /home/qasim/Dev/openlens
+./scripts/build-desktop.sh
+./scripts/package-dev.sh
+cd artifacts/dev/openlens-0.1.0-dev
+sha256sum -c SHA256SUMS</pre>
+
+    <h3>9.3 Physical automatic-start test</h3>
+    <ol>
+      <li>Install the newly rebuilt APK, not the bundled APK, on the reference S24.</li>
+      <li>Unlock the phone and leave it on the launcher. Do not open or tap OpenLens.</li>
+      <li>Start a short stream from OpenLens Desktop.</li>
+      <li>Verify the OpenLens activity appears and streaming begins without a phone tap.</li>
+      <li>Verify Android’s camera privacy indicator and foreground notification are visible.</li>
+      <li>Verify desktop preview/frame count and OBS video both advance.</li>
+      <li>Stop from the PC and confirm the Android service, camera indicator and ADB forward disappear.</li>
+      <li>Lock the phone and confirm a new session does not bypass the secure lock screen.</li>
+    </ol>
+
+    <h3>9.4 Rotation regression</h3>
+    <ol>
+      <li>Start a 60-second stream and record frame/sequence counters.</li>
+      <li>Rotate portrait → landscape → portrait at least ten times.</li>
+      <li>Confirm the desktop session never exits, Camera2 does not report a surface error, the preview relayouts, frame counters continue, and OBS does not freeze.</li>
+      <li>Retain logs/statistics and update the release evidence only if results are reproducible.</li>
+    </ol>
+
+    <h3>9.5 Stale-session regression</h3>
+    <ol>
+      <li>Create an old waiting Android session and remove its desktop forward without stopping the phone service.</li>
+      <li>Start a new desktop session with a different random name.</li>
+      <li>Confirm the service replaces the old listener, the new socket accepts, and real frames arrive.</li>
+      <li>Confirm no old <code>@openlens_…</code> socket remains after shutdown.</li>
+    </ol>
+
+    <h3>9.6 OBS test</h3>
+    <ol>
+      <li>Verify <code>/dev/video42</code> exists and accepts I420 at the selected resolution/fps.</li>
+      <li>Add Video Capture Device (V4L2) and select OpenLens/<code>/dev/video42</code>.</li>
+      <li>Separately install and test the native <strong>OpenLens Phone Camera</strong> source.</li>
+      <li>Confirm stopping/hiding behavior, reconnect slate, frame color range and timestamps.</li>
+    </ol>
+  </section>
+
+  <section id="limits">
+    <h2>10. Known limitations and uncompleted release gates</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Status</th><th>What is required</th></tr></thead>
+      <tbody>
+        <tr><td>Phone must be unlocked for a new session</td><td><span class="status info">Intentional</span></td><td>Do not bypass without a separately designed, explicitly opted-in security model.</td></tr>
+        <tr><td>Initial H.264 decode errors</td><td><span class="status warn">Investigate</span></td><td>Two startup <code>no frame</code> errors occurred in the five-second proof; decide whether to suppress pre-config data or harden decoder startup.</td></tr>
+        <tr><td>Repeated physical rotation proof</td><td><span class="status warn">Not retained</span></td><td>Run the ten-rotation sequence test and retain stats/logs.</td></tr>
+        <tr><td>1080p30 60-minute dropped-frame gate</td><td><span class="status warn">Not run</span></td><td>Attended device soak with retained counters and thermal data.</td></tr>
+        <tr><td>Two-hour V4L2/OBS recording</td><td><span class="status warn">Not run</span></td><td>Retained OBS recording and frame/drop evidence.</td></tr>
+        <tr><td>50 start/stop cycles</td><td><span class="status warn">Not run</span></td><td>Automated repetition with per-cycle outcome.</td></tr>
+        <tr><td>20 cable pulls/reconnect ≤5 seconds</td><td><span class="status warn">Not run</span></td><td>Attended USB fault-injection test.</td></tr>
+        <tr><td>External median/p95 latency</td><td><span class="status warn">Not run</span></td><td>High-frame-rate external timing capture.</td></tr>
+        <tr><td>Zero LAN/internet packets</td><td><span class="status warn">Not run</span></td><td>Host and device traffic capture during a representative session.</td></tr>
+        <tr><td>Release identity/signing</td><td><span class="status fail">Owner decision</span></td><td>Public owner name, permanent application ID, Android signing identity and publishing decision.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">No public release/tag claim should be made until mandatory NOT RUN and owner-decision gates are resolved. The present bundle is intentionally marked as a development alpha.</div>
+  </section>
+
+  <section id="files">
+    <h2>11. Key source files</h2>
+    <table>
+      <thead><tr><th>File</th><th>Why review it</th></tr></thead>
+      <tbody>
+        <tr><td><code>android/app/src/main/java/dev/openlens/app/MainActivity.kt</code></td><td>Compose UI, automatic session start, preview lifecycle, rotation-facing UI state and phone controls.</td></tr>
+        <tr><td><code>android/app/src/main/java/dev/openlens/app/CameraStreamingService.kt</code></td><td>Foreground service, socket replacement, handshake handling, Camera2/encoder lifecycle, queues and cleanup.</td></tr>
+        <tr><td><code>android/app/src/main/AndroidManifest.xml</code></td><td>Permissions, exported activity, foreground camera service and orientation configuration.</td></tr>
+        <tr><td><code>android/camera/src/main/java/dev/openlens/camera/CameraModels.kt</code></td><td>Camera2 output surfaces, capture requests, controls, focus, camera enumeration and preset validation.</td></tr>
+        <tr><td><code>android/encoder/src/main/java/dev/openlens/encoder/AvcEncoder.kt</code></td><td>MediaCodec configuration, access-unit boundaries and codec error handling.</td></tr>
+        <tr><td><code>protocol/PROTOCOL.md</code></td><td>Wire contract and compatibility expectations.</td></tr>
+        <tr><td><code>desktop/core/src/session.cpp</code></td><td>ADB session ownership, automatic phone launch, handshake/configure, receive/decode/reconnect and shutdown.</td></tr>
+        <tr><td><code>desktop/core/src/adb.cpp</code></td><td>ADB executable discovery, device inspection, forward creation/removal and app launch.</td></tr>
+        <tr><td><code>desktop/core/src/media.cpp</code></td><td>FFmpeg H.264 decoding and frame conversion.</td></tr>
+        <tr><td><code>desktop/core/src/sinks.cpp</code></td><td>V4L2 setup, output writes and placeholder behavior.</td></tr>
+        <tr><td><code>desktop/gui/src/main_window.cpp</code></td><td>Readiness UI, session worker, preview/stats, settings, Start/Stop and plugin management.</td></tr>
+        <tr><td><code>desktop/obs/src/openlens_obs.cpp</code></td><td>OBS source lifecycle, settings and asynchronous video frames.</td></tr>
+        <tr><td><code>scripts/install-desktop-app.sh</code></td><td>Exact per-user installation scope.</td></tr>
+        <tr><td><code>scripts/package-dev.sh</code></td><td>Bundle inputs, obsolete-name cleanup, checksums and SPDX generation.</td></tr>
+        <tr><td><code>docs/testing/release-evidence.md</code></td><td>Authoritative distinction between PASS and unmeasured release gates.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="acceptance">
+    <h2>12. Recommended acceptance checklist</h2>
+    <ol class="checklist">
+      <li>Source builds from a clean checkout with documented dependencies.</li>
+      <li>Android lint and Kotlin camera/protocol unit tests pass.</li>
+      <li>C++ core/protocol/GUI smoke tests pass; OBS skip reason is understood.</li>
+      <li>All developer bundle checksums verify and SPDX JSON parses.</li>
+      <li>PC Start triggers the unlocked S24 without any phone tap.</li>
+      <li>PC Stop releases camera, service, socket, forward and V4L2 ownership.</li>
+      <li>Locked phone is not bypassed.</li>
+      <li>Android camera privacy indicator and notification are visible throughout capture.</li>
+      <li>Portrait/landscape changes do not end or freeze a session.</li>
+      <li>A stale old session is replaced by a new desktop request.</li>
+      <li>OBS receives stable video through V4L2 and the native source.</li>
+      <li>No runtime <code>phonecam</code> branding remains.</li>
+      <li>Reviewer explicitly lists every remaining release blocker.</li>
+    </ol>
+    <p class="small">End of handoff. This document describes repository state observed on 2026-08-09; subsequent changes must be revalidated.</p>
+  </section>
+</main>
+</body>
+</html>

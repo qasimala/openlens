@@ -1,0 +1,34 @@
+name: Device compatibility report
+description: Report a tested Android/host/OBS combination without private identifiers.
+title: "[Device]: "
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: Never include a full serial, private log, frame, or signing information.
+  - type: input
+    id: phone
+    attributes: {label: Phone model, placeholder: Samsung Galaxy S24 Ultra}
+    validations: {required: true}
+  - type: input
+    id: android
+    attributes: {label: Android / vendor build}
+    validations: {required: true}
+  - type: input
+    id: host
+    attributes: {label: Linux distribution and kernel}
+    validations: {required: true}
+  - type: input
+    id: obs
+    attributes: {label: OBS version and package type}
+  - type: dropdown
+    id: preset
+    attributes: {label: Preset, options: [1080p30, 720p30]}
+    validations: {required: true}
+  - type: textarea
+    id: probe
+    attributes: {label: Redacted phonecam probe --json output}
+  - type: textarea
+    id: result
+    attributes: {label: Result and reproduction steps}
+    validations: {required: true}

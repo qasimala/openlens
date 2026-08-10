@@ -1,0 +1,27 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "OpenLens 0.1.0 development bundle",
+  "documentNamespace": "https://openlens.invalid/spdx/dev-0.1.0-@GENERATED@",
+  "creationInfo": {"created": "@GENERATED@", "creators": ["Tool: OpenLens package-dev.sh"]},
+  "packages": [{
+    "name": "OpenLens", "SPDXID": "SPDXRef-Package-OpenLens", "versionInfo": "0.1.0-dev",
+    "downloadLocation": "NOASSERTION", "filesAnalyzed": true,
+    "licenseConcluded": "GPL-2.0-or-later", "licenseDeclared": "GPL-2.0-or-later",
+    "copyrightText": "Copyright (C) 2026 OpenLens contributors"
+  }],
+  "files": [
+    {"fileName": "openlens-debug.apk", "SPDXID": "SPDXRef-APK", "checksums": [{"algorithm": "SHA256", "checksumValue": "@APK_SHA@"}], "licenseConcluded": "GPL-2.0-or-later", "copyrightText": "Copyright (C) 2026 OpenLens contributors"},
+    {"fileName": "openlens", "SPDXID": "SPDXRef-CLI", "checksums": [{"algorithm": "SHA256", "checksumValue": "@CLI_SHA@"}], "licenseConcluded": "GPL-2.0-or-later", "copyrightText": "Copyright (C) 2026 OpenLens contributors"},
+    {"fileName": "openlens-desktop", "SPDXID": "SPDXRef-Desktop", "checksums": [{"algorithm": "SHA256", "checksumValue": "@DESKTOP_SHA@"}], "licenseConcluded": "GPL-2.0-or-later", "copyrightText": "Copyright (C) 2026 OpenLens contributors"},
+    {"fileName": "openlens-obs.so", "SPDXID": "SPDXRef-OBS", "checksums": [{"algorithm": "SHA256", "checksumValue": "@PLUGIN_SHA@"}], "licenseConcluded": "GPL-2.0-or-later", "copyrightText": "Copyright (C) 2026 OpenLens contributors"}
+  ],
+  "relationships": [
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Package-OpenLens"},
+    {"spdxElementId": "SPDXRef-Package-OpenLens", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-APK"},
+    {"spdxElementId": "SPDXRef-Package-OpenLens", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-CLI"},
+    {"spdxElementId": "SPDXRef-Package-OpenLens", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-Desktop"},
+    {"spdxElementId": "SPDXRef-Package-OpenLens", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-OBS"}
+  ]
+}

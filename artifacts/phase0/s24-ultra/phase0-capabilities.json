@@ -1,0 +1,1043 @@
+{
+  "schema_version": 1,
+  "created_epoch_ms": 1786210410489,
+  "device": {
+    "manufacturer": "samsung",
+    "model": "SM-S928B",
+    "device": "e3q",
+    "display_build": "UP1A.231005.007.S928BXXS4AYB8",
+    "android_release": "14",
+    "sdk": 34,
+    "security_patch": "2025-03-01",
+    "soc_model": "SM8650"
+  },
+  "cameras": [
+    {
+      "id": "0",
+      "facing": "BACK",
+      "sensor_orientation": 90,
+      "hardware_level": "LEVEL_3",
+      "flash": true,
+      "physical_ids": [
+        "2",
+        "5",
+        "6",
+        "7"
+      ],
+      "focal_lengths_mm": [
+        6.3
+      ],
+      "apertures": [
+        1.7
+      ],
+      "zoom_ratio_range": {
+        "lower": 0.6,
+        "upper": 10
+      },
+      "ae_fps_ranges": [
+        {
+          "lower": 15,
+          "upper": 15
+        },
+        {
+          "lower": 24,
+          "upper": 24
+        },
+        {
+          "lower": 15,
+          "upper": 30
+        },
+        {
+          "lower": 30,
+          "upper": 30
+        },
+        {
+          "lower": 15,
+          "upper": 60
+        },
+        {
+          "lower": 60,
+          "upper": 60
+        }
+      ],
+      "exposure_compensation_range": {
+        "lower": -20,
+        "upper": 20
+      },
+      "exposure_compensation_step": "1\/10",
+      "video_stabilization_modes": [
+        0,
+        1,
+        2
+      ],
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "BURST_CAPTURE",
+        "COLOR_SPACE_PROFILES",
+        "CONSTRAINED_HIGH_SPEED_VIDEO",
+        "DYNAMIC_RANGE_TEN_BIT",
+        "LOGICAL_MULTI_CAMERA",
+        "MANUAL_POST_PROCESSING",
+        "MANUAL_SENSOR",
+        "PRIVATE_REPROCESSING",
+        "RAW",
+        "READ_SENSOR_SETTINGS",
+        "STREAM_USE_CASE",
+        "YUV_REPROCESSING"
+      ],
+      "media_codec_output_sizes": [
+        {
+          "width": 4080,
+          "height": 3060,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 3000,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3648,
+          "height": 2736,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 2252,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2992,
+          "height": 2992,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3840,
+          "height": 2160,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3648,
+          "height": 2052,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2736,
+          "height": 2736,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 1848,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 1716,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3648,
+          "height": 1704,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2560,
+          "height": 1440,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1920,
+          "height": 1440,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2400,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2336,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 824,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1440,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1088,
+          "height": 1088,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1280,
+          "height": 720,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 960,
+          "height": 720,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 720,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 360,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 352,
+          "height": 288,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 320,
+          "height": 240,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 176,
+          "height": 144,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        }
+      ]
+    },
+    {
+      "id": "1",
+      "facing": "FRONT",
+      "sensor_orientation": 270,
+      "hardware_level": "FULL",
+      "flash": false,
+      "physical_ids": [],
+      "focal_lengths_mm": [
+        3.3
+      ],
+      "apertures": [
+        2.2
+      ],
+      "zoom_ratio_range": {
+        "lower": 1,
+        "upper": 8
+      },
+      "ae_fps_ranges": [
+        {
+          "lower": 15,
+          "upper": 15
+        },
+        {
+          "lower": 24,
+          "upper": 24
+        },
+        {
+          "lower": 15,
+          "upper": 30
+        },
+        {
+          "lower": 30,
+          "upper": 30
+        },
+        {
+          "lower": 15,
+          "upper": 60
+        },
+        {
+          "lower": 60,
+          "upper": 60
+        }
+      ],
+      "exposure_compensation_range": {
+        "lower": -20,
+        "upper": 20
+      },
+      "exposure_compensation_step": "1\/10",
+      "video_stabilization_modes": [
+        0
+      ],
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "BURST_CAPTURE",
+        "COLOR_SPACE_PROFILES",
+        "CONSTRAINED_HIGH_SPEED_VIDEO",
+        "DYNAMIC_RANGE_TEN_BIT",
+        "MANUAL_POST_PROCESSING",
+        "MANUAL_SENSOR",
+        "PRIVATE_REPROCESSING",
+        "RAW",
+        "READ_SENSOR_SETTINGS",
+        "STREAM_USE_CASE"
+      ],
+      "media_codec_output_sizes": [
+        {
+          "width": 4000,
+          "height": 3000,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3648,
+          "height": 2736,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 2252,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3840,
+          "height": 2160,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2736,
+          "height": 2736,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3648,
+          "height": 2048,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3648,
+          "height": 1640,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2560,
+          "height": 1440,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1920,
+          "height": 1440,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2400,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2336,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 824,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1440,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1088,
+          "height": 1088,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1280,
+          "height": 720,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 960,
+          "height": 720,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 720,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 360,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 352,
+          "height": 288,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 320,
+          "height": 240,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 176,
+          "height": 144,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "facing": "BACK",
+      "sensor_orientation": 90,
+      "hardware_level": "LIMITED",
+      "flash": false,
+      "physical_ids": [],
+      "focal_lengths_mm": [
+        2.2
+      ],
+      "apertures": [
+        2.2
+      ],
+      "zoom_ratio_range": {
+        "lower": 1,
+        "upper": 8
+      },
+      "ae_fps_ranges": [
+        {
+          "lower": 15,
+          "upper": 15
+        },
+        {
+          "lower": 24,
+          "upper": 24
+        },
+        {
+          "lower": 15,
+          "upper": 30
+        },
+        {
+          "lower": 30,
+          "upper": 30
+        },
+        {
+          "lower": 15,
+          "upper": 60
+        },
+        {
+          "lower": 60,
+          "upper": 60
+        }
+      ],
+      "exposure_compensation_range": {
+        "lower": -20,
+        "upper": 20
+      },
+      "exposure_compensation_step": "1\/10",
+      "video_stabilization_modes": [
+        0,
+        1,
+        2
+      ],
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "BURST_CAPTURE",
+        "COLOR_SPACE_PROFILES",
+        "CONSTRAINED_HIGH_SPEED_VIDEO",
+        "DYNAMIC_RANGE_TEN_BIT",
+        "MANUAL_POST_PROCESSING",
+        "MANUAL_SENSOR",
+        "PRIVATE_REPROCESSING",
+        "RAW",
+        "READ_SENSOR_SETTINGS",
+        "STREAM_USE_CASE",
+        "YUV_REPROCESSING"
+      ],
+      "media_codec_output_sizes": [
+        {
+          "width": 4000,
+          "height": 3000,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 3000,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 2252,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 2252,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2992,
+          "height": 2992,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3840,
+          "height": 2160,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 1848,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 4000,
+          "height": 1716,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2560,
+          "height": 1440,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1920,
+          "height": 1440,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2400,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2336,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 824,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1440,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1088,
+          "height": 1088,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1280,
+          "height": 720,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 960,
+          "height": 720,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 720,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 360,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 352,
+          "height": 288,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 320,
+          "height": 240,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 176,
+          "height": 144,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "facing": "FRONT",
+      "sensor_orientation": 270,
+      "hardware_level": "FULL",
+      "flash": false,
+      "physical_ids": [],
+      "focal_lengths_mm": [
+        3.3
+      ],
+      "apertures": [
+        2.2
+      ],
+      "zoom_ratio_range": {
+        "lower": 1,
+        "upper": 8
+      },
+      "ae_fps_ranges": [
+        {
+          "lower": 15,
+          "upper": 15
+        },
+        {
+          "lower": 24,
+          "upper": 24
+        },
+        {
+          "lower": 15,
+          "upper": 30
+        },
+        {
+          "lower": 30,
+          "upper": 30
+        },
+        {
+          "lower": 15,
+          "upper": 60
+        },
+        {
+          "lower": 60,
+          "upper": 60
+        }
+      ],
+      "exposure_compensation_range": {
+        "lower": -20,
+        "upper": 20
+      },
+      "exposure_compensation_step": "1\/10",
+      "video_stabilization_modes": [
+        0
+      ],
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "BURST_CAPTURE",
+        "COLOR_SPACE_PROFILES",
+        "CONSTRAINED_HIGH_SPEED_VIDEO",
+        "DYNAMIC_RANGE_TEN_BIT",
+        "MANUAL_POST_PROCESSING",
+        "MANUAL_SENSOR",
+        "PRIVATE_REPROCESSING",
+        "RAW",
+        "READ_SENSOR_SETTINGS",
+        "STREAM_USE_CASE"
+      ],
+      "media_codec_output_sizes": [
+        {
+          "width": 3392,
+          "height": 2544,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 3392,
+          "height": 1908,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2208,
+          "height": 2208,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 2560,
+          "height": 1440,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1920,
+          "height": 1440,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2400,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 2336,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1920,
+          "height": 824,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1440,
+          "height": 1080,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1440,
+          "height": 980,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 1088,
+          "height": 1088,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 1280,
+          "height": 720,
+          "min_frame_duration_ns": 16666666,
+          "derived_max_fps": 60.0000024000001
+        },
+        {
+          "width": 960,
+          "height": 720,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 720,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 640,
+          "height": 360,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 352,
+          "height": 288,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 320,
+          "height": 240,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        },
+        {
+          "width": 176,
+          "height": 144,
+          "min_frame_duration_ns": 33333333,
+          "derived_max_fps": 30.000000300000004
+        }
+      ]
+    }
+  ],
+  "avc_encoders": [
+    {
+      "name": "c2.qti.avc.encoder",
+      "canonical_name": "c2.qti.avc.encoder",
+      "hardware_accelerated": true,
+      "software_only": false,
+      "vendor": true,
+      "max_instances": 16,
+      "width_alignment": 2,
+      "height_alignment": 2,
+      "supported_widths": "[128, 8192]",
+      "supported_heights": "[128, 8192]",
+      "bitrate_range": "[1, 220000000]",
+      "supports_cbr": true,
+      "supports_vbr": true,
+      "supports_cq": false,
+      "color_formats": [
+        2130708361,
+        2135033992,
+        19,
+        21,
+        20,
+        39,
+        2130750114,
+        54
+      ],
+      "profile_levels": [
+        {
+          "profile": 1,
+          "level": 131072
+        },
+        {
+          "profile": 65536,
+          "level": 131072
+        },
+        {
+          "profile": 2,
+          "level": 131072
+        },
+        {
+          "profile": 8,
+          "level": 131072
+        },
+        {
+          "profile": 524288,
+          "level": 131072
+        }
+      ],
+      "fps_1920x1080": "[1.0, 480.0]",
+      "fps_1280x720": "[1.0, 480.0]"
+    },
+    {
+      "name": "OMX.qcom.video.encoder.avc",
+      "canonical_name": "c2.qti.avc.encoder",
+      "hardware_accelerated": true,
+      "software_only": false,
+      "vendor": true,
+      "max_instances": 16,
+      "width_alignment": 2,
+      "height_alignment": 2,
+      "supported_widths": "[128, 8192]",
+      "supported_heights": "[128, 8192]",
+      "bitrate_range": "[1, 220000000]",
+      "supports_cbr": true,
+      "supports_vbr": true,
+      "supports_cq": false,
+      "color_formats": [
+        2130708361,
+        2135033992,
+        19,
+        21,
+        20,
+        39,
+        2130750114,
+        54
+      ],
+      "profile_levels": [
+        {
+          "profile": 1,
+          "level": 131072
+        },
+        {
+          "profile": 65536,
+          "level": 131072
+        },
+        {
+          "profile": 2,
+          "level": 131072
+        },
+        {
+          "profile": 8,
+          "level": 131072
+        },
+        {
+          "profile": 524288,
+          "level": 131072
+        }
+      ],
+      "fps_1920x1080": "[1.0, 480.0]",
+      "fps_1280x720": "[1.0, 480.0]"
+    },
+    {
+      "name": "c2.android.avc.encoder",
+      "canonical_name": "c2.android.avc.encoder",
+      "hardware_accelerated": false,
+      "software_only": true,
+      "vendor": false,
+      "max_instances": 32,
+      "width_alignment": 2,
+      "height_alignment": 2,
+      "supported_widths": "[16, 2048]",
+      "supported_heights": "[16, 2048]",
+      "bitrate_range": "[1, 12000000]",
+      "supports_cbr": true,
+      "supports_vbr": true,
+      "supports_cq": false,
+      "color_formats": [
+        2135033992,
+        19,
+        21,
+        20,
+        39,
+        2130708361
+      ],
+      "profile_levels": [
+        {
+          "profile": 1,
+          "level": 16384
+        },
+        {
+          "profile": 65536,
+          "level": 16384
+        },
+        {
+          "profile": 2,
+          "level": 16384
+        }
+      ],
+      "fps_1920x1080": "[1.2254901960784314E-4, 30.11764705882353]",
+      "fps_1280x720": "[2.777777777777778E-4, 68.26666666666667]"
+    },
+    {
+      "name": "OMX.google.h264.encoder",
+      "canonical_name": "c2.android.avc.encoder",
+      "hardware_accelerated": false,
+      "software_only": true,
+      "vendor": false,
+      "max_instances": 32,
+      "width_alignment": 2,
+      "height_alignment": 2,
+      "supported_widths": "[16, 2048]",
+      "supported_heights": "[16, 2048]",
+      "bitrate_range": "[1, 12000000]",
+      "supports_cbr": true,
+      "supports_vbr": true,
+      "supports_cq": false,
+      "color_formats": [
+        2135033992,
+        19,
+        21,
+        20,
+        39,
+        2130708361
+      ],
+      "profile_levels": [
+        {
+          "profile": 1,
+          "level": 16384
+        },
+        {
+          "profile": 65536,
+          "level": 16384
+        },
+        {
+          "profile": 2,
+          "level": 16384
+        }
+      ],
+      "fps_1920x1080": "[1.2254901960784314E-4, 30.11764705882353]",
+      "fps_1280x720": "[2.777777777777778E-4, 68.26666666666667]"
+    }
+  ],
+  "thermal_status": 0
+}

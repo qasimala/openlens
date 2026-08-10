@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Final v3 build plan for an open-source Android phone camera for OBS over USB and ADB.">
+  <title>Phone Camera for OBS — Final Build Plan v3</title>
+  <style>
+    :root {
+      --bg: #09110e;
+      --panel: #101b17;
+      --panel-2: #16241e;
+      --panel-3: #1b2d25;
+      --ink: #edf8f3;
+      --muted: #a6bbb2;
+      --line: #294238;
+      --brand: #58dda8;
+      --brand-2: #a4f4d1;
+      --blue: #79c4ff;
+      --amber: #ffc86f;
+      --red: #ff9189;
+      --code: #050d0a;
+      --shadow: 0 18px 50px rgba(0,0,0,.25);
+      --radius: 16px;
+      --max: 1180px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f3f8f5;
+        --panel: #fff;
+        --panel-2: #edf5f1;
+        --panel-3: #e5f1eb;
+        --ink: #14231d;
+        --muted: #5c7168;
+        --line: #c8dcd2;
+        --brand: #087f5b;
+        --brand-2: #075f47;
+        --blue: #136ca8;
+        --amber: #915800;
+        --red: #b42318;
+        --code: #10241d;
+        --shadow: 0 14px 38px rgba(24,67,50,.08);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 9% -4%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 30rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.63;
+    }
+
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    code { padding: .12em .36em; border-radius: 5px; color: var(--brand-2); background: var(--code); font-size: .9em; }
+    pre { overflow-x: auto; margin: 1rem 0; padding: 1rem 1.15rem; border: 1px solid var(--line); border-radius: 12px; color: #e1fff2; background: var(--code); line-height: 1.48; }
+    pre code { padding: 0; color: inherit; background: transparent; }
+
+    .shell { width: min(var(--max), calc(100% - 2rem)); margin: 0 auto; }
+    header {
+      padding: 4.6rem 0 3.4rem;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(120deg, rgba(5,64,45,.97), rgba(5,22,17,.93));
+    }
+    .eyebrow { margin: 0 0 .72rem; color: #92eac7; font-size: .78rem; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
+    h1, h2, h3, h4 { line-height: 1.2; }
+    h1 { max-width: 950px; margin: 0; color: #f2fff9; font-size: clamp(2.2rem, 6vw, 4.6rem); letter-spacing: -.047em; }
+    .lede { max-width: 890px; margin: 1.2rem 0 0; color: #d2eee2; font-size: clamp(1.05rem, 2vw, 1.28rem); }
+    .meta { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1.55rem; }
+    .pill { display: inline-block; padding: .34rem .68rem; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; color: #eafff5; background: rgba(255,255,255,.07); font-size: .82rem; }
+
+    nav { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 91%, transparent); backdrop-filter: blur(12px); }
+    nav .shell { display: flex; gap: 1.05rem; overflow-x: auto; padding-top: .78rem; padding-bottom: .78rem; white-space: nowrap; }
+    nav a { color: var(--muted); font-size: .83rem; font-weight: 760; text-decoration: none; }
+    nav a:hover { color: var(--brand); }
+
+    main { padding: 2rem 0 5rem; }
+    section { scroll-margin-top: 4.5rem; margin: 1.15rem 0 2.5rem; padding: clamp(1.2rem, 3vw, 2.15rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+    h2 { margin: 0 0 1rem; color: var(--brand); font-size: clamp(1.55rem, 3vw, 2.18rem); letter-spacing: -.026em; }
+    h3 { margin: 1.6rem 0 .55rem; font-size: 1.22rem; }
+    h4 { margin: 1.2rem 0 .4rem; font-size: 1rem; }
+    p { margin: .65rem 0 1rem; }
+    ul, ol { padding-left: 1.35rem; }
+    li + li { margin-top: .34rem; }
+
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem; margin-top: 1.1rem; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    .card { padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+    .card h3, .card h4 { margin-top: 0; }
+    .metric strong { display: block; color: var(--brand); font-size: 1.34rem; line-height: 1.2; }
+    .metric span { color: var(--muted); font-size: .86rem; }
+
+    .callout { margin: 1.15rem 0; padding: 1rem 1.1rem; border-left: 4px solid var(--brand); border-radius: 0 10px 10px 0; background: var(--panel-3); }
+    .callout.warn { border-left-color: var(--amber); }
+    .callout.danger { border-left-color: var(--red); }
+    .callout p:last-child { margin-bottom: 0; }
+
+    .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; gap: .65rem; align-items: stretch; margin: 1.4rem 0; }
+    .node { padding: .9rem; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); }
+    .node strong { display: block; color: var(--brand); }
+    .node small { color: var(--muted); }
+    .arrow { align-self: center; color: var(--brand); font-size: 1.35rem; font-weight: 900; }
+
+    .table-wrap { overflow-x: auto; margin: 1rem 0; }
+    table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: .92rem; }
+    th, td { padding: .7rem .76rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--brand); background: var(--panel-2); font-size: .78rem; letter-spacing: .045em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+
+    .badge { display: inline-block; padding: .12rem .46rem; border-radius: 999px; color: #08251a; background: #6be0af; font-size: .75rem; font-weight: 850; white-space: nowrap; }
+    .badge.alpha { color: #2e1c00; background: #ffc56d; }
+    .badge.beta { color: #102331; background: #83c7ff; }
+    .badge.later { color: #fff; background: #7b4b91; }
+    .badge.stop { color: #fff; background: #9d3c36; }
+
+    .phase { margin: 1.2rem 0; padding: 1.1rem 1.2rem 1.05rem 1.35rem; border: 1px solid var(--line); border-left: 5px solid var(--brand); border-radius: 12px; background: var(--panel-2); }
+    .phase h3 { margin: 0; }
+    .phase-meta { margin: .2rem 0 .8rem; color: var(--muted); font-size: .87rem; }
+    .exit { color: var(--brand-2); font-weight: 750; }
+    .checks { list-style: none; padding-left: 0; }
+    .checks li { position: relative; padding-left: 1.55rem; }
+    .checks li::before { position: absolute; left: 0; top: .05rem; content: "□"; color: var(--brand); font-size: 1.08rem; font-weight: 900; }
+
+    .frozen { border-left: 4px solid var(--blue); }
+    .sources li { margin-bottom: .55rem; }
+    footer { padding: 1rem 0 3rem; color: var(--muted); font-size: .85rem; text-align: center; }
+
+    @media (max-width: 900px) {
+      .span-3, .span-4, .span-6, .span-8 { grid-column: span 12; }
+      .flow { grid-template-columns: 1fr; }
+      .arrow { justify-self: center; transform: rotate(90deg); }
+    }
+
+    @media print {
+      :root { --bg:#fff; --panel:#fff; --panel-2:#f3f6f4; --panel-3:#eef3f0; --ink:#111; --muted:#555; --line:#ccc; --brand:#075f47; --brand-2:#075f47; --blue:#165f91; --shadow:none; }
+      body { background:#fff; font-size:10pt; }
+      header { padding:1.4cm 0 1cm; print-color-adjust:exact; }
+      nav { display:none; }
+      main { padding-top:.4cm; }
+      section { break-inside:avoid; margin:0 0 .5cm; padding:.5cm; }
+      .phase, .card, table { break-inside:avoid; }
+      a { color:inherit; text-decoration:none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="shell">
+      <p class="eyebrow">Final plan · version 3 · ready for go-ahead</p>
+      <h1>Android phone camera for OBS</h1>
+      <p class="lede">
+        The final build contract synthesized from both v2 plans: an installable Android camera app, hardware H.264 over a per-session ADB tunnel, a Linux V4L2 alpha for the quickest working camera, and a native OBS-source beta built on the same desktop core.
+      </p>
+      <div class="meta">
+        <span class="pill">Finalized 8 August 2026</span>
+        <span class="pill">Phone: Galaxy S24 Ultra</span>
+        <span class="pill">Host: CachyOS/Linux</span>
+        <span class="pill">Desktop: C++20</span>
+        <span class="pill">v0.1 alpha: V4L2</span>
+        <span class="pill">v0.2 beta: native OBS source</span>
+        <span class="pill">Video-only initial releases</span>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <div class="shell">
+      <a href="#verdict">Verdict</a>
+      <a href="#scope">Scope</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#protocol">Protocol</a>
+      <a href="#android">Android</a>
+      <a href="#desktop">Desktop</a>
+      <a href="#obs">OBS</a>
+      <a href="#ux">UX</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#testing">Testing</a>
+      <a href="#security">Security</a>
+      <a href="#repo">Repository</a>
+      <a href="#risks">Risks</a>
+      <a href="#goahead">Go-ahead</a>
+    </div>
+  </nav>
+
+  <main class="shell">
+    <section id="verdict">
+      <h2>1. Final verdict and frozen decisions</h2>
+      <p>
+        Claude v2 and Codex v2 converge on the same core architecture. V3 removes the remaining ambiguity and deliberately limits the first release so implementation has one path, one desktop toolchain, one protocol, and measurable completion gates.
+      </p>
+
+      <div class="grid">
+        <article class="card frozen span-4">
+          <h3>v0.1 alpha</h3>
+          <p><strong>Phone → USB/ADB → desktop CLI → V4L2 → OBS.</strong> This is the fastest complete proof and remains the system-wide Linux-camera path.</p>
+        </article>
+        <article class="card frozen span-4">
+          <h3>v0.2 beta</h3>
+          <p><strong>Phone → USB/ADB → shared desktop core → native OBS source.</strong> This is the flagship OBS experience and future Windows/macOS path.</p>
+        </article>
+        <article class="card frozen span-4">
+          <h3>Not in either</h3>
+          <p>Audio, Wi-Fi, 720p60 promises, 1080p60, 4K, HEVC, HDR, physical-lens guarantees, and non-Linux packages.</p>
+        </article>
+      </div>
+
+      <h3>Architecture decision record</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Decision</th><th>Final v3 choice</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>First platform</td><td>CachyOS/Linux + Galaxy S24 Ultra</td><td>Matches the actual hardware and prevents false broad-support claims.</td></tr>
+            <tr><td>Camera engine</td><td>Camera2 only</td><td>Direct encoder Surface, exact capabilities, manual controls, no file-recorder abstraction.</td></tr>
+            <tr><td>Phone language/UI</td><td>Kotlin + Compose</td><td>Native Android tooling and clear lifecycle/permission UI.</td></tr>
+            <tr><td>Desktop language</td><td>C++20 + CMake</td><td>One toolchain and object model for CLI, FFmpeg/V4L2, and libobs; avoids a Rust↔C ABI seam before product fit is proven.</td></tr>
+            <tr><td>Memory-safety response</td><td>Bounds, RAII, fuzzing, sanitizers, warnings-as-errors, hardened release flags</td><td>Retains one language while treating the protocol as hostile input.</td></tr>
+            <tr><td>Video codec</td><td>H.264/AVC, 8-bit SDR, 4:2:0</td><td>Broad hardware support and predictable OBS/FFmpeg decode.</td></tr>
+            <tr><td>Transport</td><td>One multiplexed protocol over a per-session Android abstract socket forwarded by ADB</td><td>No LAN listener, stale fixed port, second control socket, or network setup.</td></tr>
+            <tr><td>First sink</td><td>V4L2 virtual camera</td><td>Works in OBS immediately and stays useful outside OBS.</td></tr>
+            <tr><td>Flagship sink</td><td>Native asynchronous OBS video-source plugin</td><td>Best timestamps, buffering, reconnect UX, source properties, and cross-platform direction.</td></tr>
+            <tr><td>License</td><td>GPL-2.0-or-later for original project code, provisional until pre-release review</td><td>One policy is simpler for contributors and compatible with the OBS-linked deliverable; clean-room implementation avoids importing scrcpy code.</td></tr>
+            <tr><td>Android floor</td><td>minSdk 31 (Android 12)</td><td>Focuses the first compatibility surface on modern streaming phones and the S24 target.</td></tr>
+            <tr><td>Public name</td><td>Unresolved but non-blocking; “openlens” is a private codename only</td><td>The name collides with the Lens/OpenLens Kubernetes ecosystem; freeze the real name before public package IDs.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <strong>License note:</strong> this is engineering policy, not legal advice. Before the first distributed binary, generate the real dependency inventory and verify OBS/template, FFmpeg build configuration, Android dependencies, packaging, and any third-party source. Do not copy scrcpy code during the initial implementation.
+      </div>
+
+      <h3>Why no questions block the build</h3>
+      <p>
+        Desktop language, license direction, release sequencing, 720p60, and audio are resolved above. The final public name is the only owner preference still needed, but phase-zero spikes and private implementation can use the repository codename and a temporary prototype application ID. The name must be chosen before public beta, not before engineering starts.
+      </p>
+    </section>
+
+    <section id="scope">
+      <h2>2. Product contract and release scope</h2>
+
+      <div class="callout">
+        <strong>Core promise:</strong> after one-time ADB and V4L2 prerequisites, connect the S24 Ultra by USB, open the app, press Start, run one desktop command, and select <strong>Phone Camera</strong> in OBS at stable 1080p30—with no account, cloud, telemetry, watermark, or Wi-Fi dependency.
+      </div>
+
+      <div class="grid">
+        <article class="card span-6">
+          <h3>v0.1 alpha must include</h3>
+          <ul>
+            <li>Android APK tested and certified on the S24 Ultra.</li>
+            <li>Rear/front logical camera, 720p30 and 1080p30 presets.</li>
+            <li>Hardware H.264 encode, USB/ADB transport, software H.264 decode.</li>
+            <li>V4L2 I420/NV12/YUYV negotiation based on the actual OBS path.</li>
+            <li>Zoom, autofocus/tap focus, exposure compensation, torch, mirror, orientation.</li>
+            <li>Device selection, reconnect, doctor command, statistics, support bundle.</li>
+            <li>CachyOS-specific and distro-neutral setup/troubleshooting docs.</li>
+          </ul>
+        </article>
+        <article class="card span-6">
+          <h3>v0.2 beta adds</h3>
+          <ul>
+            <li>Native Linux OBS asynchronous video-source plugin.</li>
+            <li>Device, preset, bitrate, camera, mirror, rotation, and buffer source properties.</li>
+            <li>Live connection/statistics status and actionable source errors.</li>
+            <li>Correct libobs timestamps, pixel format, color space, matrix, and range.</li>
+            <li>Scene lifecycle, hidden-source behavior, duplicate-source guard, clean shutdown.</li>
+            <li>Plugin package/installer, compatibility matrix, and Flatpak limitations.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3>Acceptance gates</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Measure</th><th>v0.1 alpha gate</th><th>v0.2 beta gate</th><th>Method</th></tr></thead>
+          <tbody>
+            <tr><td>Video</td><td>Stable 1080p30 SDR</td><td>Stable 1080p30 SDR</td><td>OBS recording + actual frame statistics.</td></tr>
+            <tr><td>Median latency</td><td>&lt;150 ms</td><td>≤120 ms target; ≤150 ms hard maximum</td><td>External glass-to-OBS timer/LED test.</td></tr>
+            <tr><td>p95 latency</td><td>&lt;250 ms</td><td>≤200 ms target; &lt;250 ms hard maximum</td><td>Same external capture, multiple conditions.</td></tr>
+            <tr><td>Dropped frames</td><td>&lt;0.5% / 60 min</td><td>&lt;0.5% / 60 min</td><td>Sequence gaps + sink/OBS statistics.</td></tr>
+            <tr><td>Soak</td><td>2 hours without crash/disconnect</td><td>2 hours while OBS records</td><td>Redacted logs, memory and queue graphs.</td></tr>
+            <tr><td>Reconnect</td><td>≤5 s after ADB reports device ready</td><td>Same, without restarting OBS</td><td>20 controlled cable-pull cycles.</td></tr>
+            <tr><td>Start/stop</td><td>50 cycles</td><td>50 source/session cycles</td><td>Automated where possible; leak checks.</td></tr>
+            <tr><td>Repeat start</td><td>≤30 s from connected phone to OBS image</td><td>≤20 s</td><td>Prepared machine with prerequisites installed.</td></tr>
+            <tr><td>Privacy</td><td>Zero LAN/internet packets</td><td>Same</td><td>Host/device network capture in USB mode.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Internal encoder/socket/decode timestamps locate latency but never replace the external measurement. A latency regression requires an explanation and explicit acceptance; “never merge any regression” is too rigid when a security or correctness fix justifies a small cost.
+      </p>
+
+      <h3>Not promised before v0.3</h3>
+      <p>Microphone audio, 720p60, 1080p60, 4K, HEVC, HDR, stabilization controls, exact ultrawide/3×/5× selection, Wi-Fi, F-Droid, Windows/macOS, multi-phone sessions, and virtual cameras outside Linux.</p>
+    </section>
+
+    <section id="architecture">
+      <h2>3. End-to-end architecture</h2>
+
+      <div class="flow" aria-label="System architecture">
+        <div class="node"><strong>Camera2</strong><small>preview + encoder Surface<br>capabilities and controls</small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><strong>MediaCodec</strong><small>H.264 access units<br>monotonic PTS</small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><strong>ADB session</strong><small>abstract socket<br>binary envelope</small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><strong>Desktop core</strong><small>decode + reconnect<br>V4L2 / OBS sinks</small></div>
+      </div>
+
+      <pre><code>Galaxy S24 Ultra                                     CachyOS / Linux
+┌──────────────────────────────┐                      ┌─────────────────────────────────┐
+│ Compose activity             │                      │ C++20 desktop core              │
+│  permissions · preview       │   USB + adb forward  │  ADB · protocol · reconnect    │
+│  camera controls · status    │◄════════════════════►│  FFmpeg decode · stats          │
+│          │                   │  localabstract/TCP   │              │                  │
+│ camera foreground service    │                      │        normalized frame         │
+│  Camera2 repeating request   │                      │          ┌───┴────┐             │
+│   ├─ preview Surface         │                      │     V4L2 sink   OBS sink         │
+│   └─ MediaCodec Surface      │                      │       v0.1        v0.2           │
+└──────────────────────────────┘                      └─────────────────────────────────┘</code></pre>
+
+      <h3>Module responsibilities</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Module</th><th>Responsibility</th><th>Boundary</th></tr></thead>
+          <tbody>
+            <tr><td>Android camera</td><td>Enumerate capabilities; own CameraDevice/session/requests and controls.</td><td>No protocol or desktop concepts.</td></tr>
+            <tr><td>Android encoder</td><td>Configure/drain MediaCodec; emit access units/config/PTS and actual format.</td><td>No socket writes or UI.</td></tr>
+            <tr><td>Android session</td><td>Visible-start lifecycle, foreground service, abstract socket, framing, bounded queue.</td><td>Consumes camera/encoder interfaces.</td></tr>
+            <tr><td>Desktop ADB</td><td>Discover/select device, launch visible activity, create/remove only owned forwarding rule.</td><td>No decode or source UI.</td></tr>
+            <tr><td>Desktop protocol</td><td>Handshake, bounded parser, versioning, controls, heartbeat, statistics.</td><td>No sink or ADB process details.</td></tr>
+            <tr><td>Desktop media</td><td>Decode H.264, normalize raw frames, preserve timing/color metadata.</td><td>No OBS/V4L2-specific lifecycle.</td></tr>
+            <tr><td>Sink interface</td><td>Start/reconfigure/push-frame/placeholder/stop contract.</td><td>Implemented independently by null, file, V4L2, and OBS.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Non-negotiable runtime rules</h3>
+      <ul>
+        <li>Every queue has a documented maximum. Video favors dropping stale work over increasing latency.</li>
+        <li>All blocking operations support cancellation and bounded shutdown.</li>
+        <li>Media uses monotonic microsecond timestamps. Wall-clock time is diagnostic only.</li>
+        <li>Every reconfigure creates a new stream ID and starts with codec configuration plus a keyframe.</li>
+        <li>Only one active controlling desktop client per phone in v0.x.</li>
+        <li>No hidden quality downgrade, privileged host mutation, automatic recording, or network fallback.</li>
+      </ul>
+    </section>
+
+    <section id="protocol">
+      <h2>4. ADB session and protocol v0.1</h2>
+
+      <h3>Connection lifecycle</h3>
+      <ol>
+        <li>The CLI/plugin enumerates ADB and requires one ready device or an explicit serial.</li>
+        <li>It creates a random alphanumeric session ID and abstract name such as <code>openlens_7f31a2c9</code>.</li>
+        <li>It launches the app’s visible activity with fixed, safely encoded intent extras for the session and requested preset.</li>
+        <li>The app requests permission if needed, shows the connection request, and requires the user to press Start.</li>
+        <li>The activity starts the correctly typed camera foreground service; the service creates <code>LocalServerSocket</code> using the session name.</li>
+        <li>The desktop forwards a free host-loopback port to that <code>localabstract</code> socket and connects. It retries port selection on a race.</li>
+        <li><code>HELLO</code>/<code>HELLO_ACK</code>, capabilities, and requested/applied configuration complete before video begins.</li>
+        <li>Heartbeat failure tears down codec/socket/decoder state. Reconnect targets only the same serial and creates a new stream ID.</li>
+        <li>Shutdown removes only the forwarding rule created for this session.</li>
+      </ol>
+
+      <h3>36-byte base header</h3>
+      <p>All integer fields are unsigned and big-endian. Payload limits are checked before allocation.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Bytes</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Magic</td><td>4</td><td><code>PHCM</code></td></tr>
+            <tr><td>Major / minor</td><td>1 + 1</td><td>Major incompatibility fails; minor features negotiate.</td></tr>
+            <tr><td>Message type</td><td>2</td><td>Known required or safely skippable optional type.</td></tr>
+            <tr><td>Flags</td><td>2</td><td>Required, keyframe, config, acknowledgement, end-of-stream.</td></tr>
+            <tr><td>Header length</td><td>2</td><td>Base value 36; permits future extension.</td></tr>
+            <tr><td>Stream ID</td><td>4</td><td>Separates reconfigured/restarted streams and future audio.</td></tr>
+            <tr><td>Sequence</td><td>8</td><td>Monotonic per connection; exposes gaps/duplicates.</td></tr>
+            <tr><td>PTS microseconds</td><td>8</td><td>Monotonic media time; zero when not applicable.</td></tr>
+            <tr><td>Payload length</td><td>4</td><td>Validated against per-message/global maximum.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Messages and payloads</h3>
+      <p><code>HELLO</code>, <code>HELLO_ACK</code>, <code>CAPABILITIES</code>, <code>CONFIGURE</code>, <code>CONFIGURED</code>, <code>VIDEO_CONFIG</code>, <code>VIDEO_FRAME</code>, <code>CONTROL</code>, <code>CONTROL_ACK</code>, <code>STATS</code>, <code>PING</code>, <code>PONG</code>, <code>ERROR</code>, and <code>END_STREAM</code>.</p>
+      <ul>
+        <li>Capabilities, configuration, controls, acknowledgements, statistics, and errors use versioned UTF-8 JSON schemas inside the binary envelope.</li>
+        <li>Video messages contain MediaCodec-produced codec configuration or one encoded access unit; no base64 and no JSON video data.</li>
+        <li>Global v0.1 payload maximum: 8 MiB. Control/metadata maximum: 256 KiB. Dimensions maximum: 4096×2160. UI exposes only certified presets.</li>
+        <li>Unknown optional messages are skipped. Unknown required messages end the connection with a version error.</li>
+        <li>Every control ACK reports requested value, applied value, and a stable error code/reason when clamped or unsupported.</li>
+      </ul>
+
+      <h3>Default encoder contract</h3>
+      <ul>
+        <li>1920×1080, 30 fps, 8 Mbps CBR, H.264 Main profile when accepted, Baseline fallback, SDR 4:2:0.</li>
+        <li>One-second keyframe interval; request sync frame after discontinuity/reconnect.</li>
+        <li>No B-frames where supported and verified. Report actual encoder/profile/level/bitrate mode.</li>
+        <li>Use the exact codec-specific data emitted by MediaCodec. A new stream starts with <code>VIDEO_CONFIG</code> plus a keyframe.</li>
+        <li>720p30 default fallback at 4 Mbps. Bitrate is user-adjustable within capability and safety limits only after the stable presets work.</li>
+      </ul>
+    </section>
+
+    <section id="android">
+      <h2>5. Android application</h2>
+
+      <h3>Stack and modules</h3>
+      <ul>
+        <li>Kotlin, Gradle Kotlin DSL, Jetpack Compose, coroutines, immutable UI/session state, minSdk 31.</li>
+        <li><code>app</code>: activity, Compose UI, runtime permissions, foreground-service lifecycle.</li>
+        <li><code>camera</code>: Camera2 capabilities, preset validation, session, controls, capture results.</li>
+        <li><code>encoder</code>: MediaCodec selection/configuration/input Surface/output buffers.</li>
+        <li><code>protocol</code>: message models, framing, bounded serialization/parser, fixtures.</li>
+      </ul>
+
+      <h3>Capture pipeline</h3>
+      <ol>
+        <li>Enumerate the selected logical camera and derive allowed Surface size/FPS combinations.</li>
+        <li>Configure MediaCodec encoder and obtain its input Surface.</li>
+        <li>Create a Camera2 <code>TEMPLATE_RECORD</code> repeating request targeting preview and encoder surfaces.</li>
+        <li>Use an advertised constant AE FPS range; continuous-video AF; compatible stabilization default.</li>
+        <li>Drain encoder asynchronously, translate flags/PTS, and enqueue bounded protocol messages.</li>
+        <li>On setting changes requiring rebuild, stop transactionally, increment stream ID, recreate, emit config/keyframe, resume.</li>
+      </ol>
+
+      <h3>Camera behavior</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Feature</th><th>Initial behavior</th><th>Rule</th></tr></thead>
+          <tbody>
+            <tr><td>Rear/front</td><td>Select exposed logical camera.</td><td>Disable unavailable values.</td></tr>
+            <tr><td>Zoom</td><td>Logical-camera zoom ratio.</td><td>Let Samsung transition lenses; report actual range.</td></tr>
+            <tr><td>Physical lenses</td><td>Diagnostics only.</td><td>Do not expose direct selection until the S24 proves it reliably.</td></tr>
+            <tr><td>Focus</td><td>Continuous-video AF plus tap AF/AE region.</td><td>Report fixed-focus/unsupported cases.</td></tr>
+            <tr><td>Exposure</td><td>Advertised compensation range/step.</td><td>Clamp and acknowledge applied value.</td></tr>
+            <tr><td>Torch</td><td>Only when advertised and session-compatible.</td><td>Disable with reason otherwise.</td></tr>
+            <tr><td>Rotation</td><td>Fixed encoded dimensions plus transform metadata.</td><td>Rebuild only when dimensions truly change.</td></tr>
+            <tr><td>Thermals</td><td>Display status and recommend 720p30.</td><td>No silent downgrade in v0.x.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Lifecycle and UI</h3>
+      <ul>
+        <li>Permission needed → Ready → Desktop request → Waiting for Start → Starting → Streaming → Recovering → Error/Stopped.</li>
+        <li>Camera permission is requested in context. Microphone permission does not exist until audio is implemented.</li>
+        <li>Streaming starts from a visible activity and uses current camera foreground-service declarations and a persistent Stop notification.</li>
+        <li>No boot start, hidden start, or background bypass. Screen lock/background behavior is verified on the exact One UI build.</li>
+        <li>Streaming view shows preview, camera, zoom, requested/actual FPS, bitrate, encoder, keyframes, drops, thermal state, elapsed time, and Stop.</li>
+        <li>“Dim preview” is available. Do not request a battery-optimization exemption unless measurement proves it necessary.</li>
+      </ul>
+    </section>
+
+    <section id="desktop">
+      <h2>6. Desktop core and CLI</h2>
+
+      <h3>Toolchain</h3>
+      <ul>
+        <li>C++20, CMake, Ninja in development, clang-format, clang-tidy, warnings-as-errors in project code.</li>
+        <li>RAII for sockets/processes/codec/frames/device handles; <code>std::span</code> for bounded views; checked size arithmetic.</li>
+        <li>ASan/UBSan debug CI, fuzz targets for framing/JSON schema boundaries, and hardened release flags supported by the toolchain.</li>
+        <li>System <code>adb</code> and dynamically linked FFmpeg libraries initially. No bundled Platform Tools or codec libraries before packaging review.</li>
+        <li>FFmpeg software H.264 decoder first. Hardware decode is an optimization only if measurements improve latency/CPU without reliability loss.</li>
+      </ul>
+
+      <h3>CLI surface</h3>
+      <pre><code>openlens doctor                         # prerequisites, device, app, V4L2, FFmpeg
+openlens devices                        # ready/offline/unauthorized devices
+openlens cameras --device SERIAL        # capability report
+openlens start                          # launch app, connect, decode, write V4L2
+openlens start --preset 720p30
+openlens start --device SERIAL --video /dev/video10
+openlens probe --json                   # redacted support/compatibility data
+openlens receive --sink null --seconds 60
+openlens receive --sink file --output explicit.h264</code></pre>
+
+      <h3>ADB manager</h3>
+      <ul>
+        <li>Locate <code>adb</code> through PATH or explicit setting; check version; parse devices into ready/offline/unauthorized states.</li>
+        <li>Require explicit selection with multiple ready devices and persist only a user-selected serial.</li>
+        <li>Invoke processes with argument vectors, never a shell command assembled from device data.</li>
+        <li>Generate safe session/socket names, launch visible activity, create/remove only owned forwards, capture actionable stderr.</li>
+        <li>Redact/harden serials in default logs and JSON support output.</li>
+      </ul>
+
+      <h3>Decode and sink pipeline</h3>
+      <ul>
+        <li>Parser emits codec config/access units; decoder flushes on new stream ID and waits for config/keyframe.</li>
+        <li>Normalize to a frame structure carrying planes, strides, width/height, PTS, color space/matrix/range, and discontinuity.</li>
+        <li>Sink interface supports configure, push, placeholder, flush, and stop.</li>
+        <li>Low-latency queue is at most two decoded frames. When behind, drop safely at stream boundaries rather than replay stale video.</li>
+        <li>Per-stage statistics: receive bitrate, sequence gaps, queue depth, decode time/errors, conversion time, sink write time, actual FPS.</li>
+      </ul>
+    </section>
+
+    <section id="obs">
+      <h2>7. Linux V4L2 alpha and native OBS beta</h2>
+
+      <h3>v0.1 V4L2 path</h3>
+      <ol>
+        <li><code>openlens doctor</code> checks for a loopback module/device and tests supported raw formats.</li>
+        <li>If absent, it prints reviewed CachyOS and generic Linux instructions plus the exact proposed <code>video_nr</code>, label, and <code>exclusive_caps=1</code> parameters.</li>
+        <li>The user performs privileged package/module actions. The program does not invoke <code>sudo</code>, edit boot configuration, or load a module silently.</li>
+        <li>The V4L2 sink negotiates the phase-zero-proven raw format—prefer I420 when OBS/device support is correct; otherwise NV12/YUYV.</li>
+        <li>OBS adds Video Capture Device (V4L2) → Phone Camera. The CLI owns the live session and controls.</li>
+        <li>On disconnect, the sink emits a low-rate generated reconnect slate so OBS retains the source/device.</li>
+      </ol>
+
+      <h3>v0.2 native source</h3>
+      <ul>
+        <li>Use the official OBS build/toolchain guidance and only template code whose license is reviewed and preserved.</li>
+        <li>Register one asynchronous source named <strong>Phone Camera</strong>. Share ADB/protocol/decode/reconnect through desktop core.</li>
+        <li>Each physical phone permits one active controlling source. A duplicate source shows a clear “device already in use” state.</li>
+        <li>Properties: device, preset, bitrate, facing, zoom, focus mode, exposure, torch, mirror, rotation, buffer mode, stop-when-hidden, status.</li>
+        <li>Publish correct frame timestamps and color metadata. Reconfigure on a new stream/config/keyframe boundary.</li>
+        <li>Keep running while hidden by default for instant scene changes; allow opt-in stop-when-hidden.</li>
+        <li>Hold last frame for at most two seconds after disconnect, then show a generated disconnected slate while reconnecting.</li>
+        <li>Test native package first. Document Flatpak host-ADB/plugin-location constraints rather than claiming unsupported packaging.</li>
+      </ul>
+
+      <h3>Why both paths remain</h3>
+      <p>V4L2 enables all Linux camera consumers and isolates upstream debugging from OBS. The plugin gives the intended OBS user experience and is the Windows/macOS entry point. Neither reimplements transport or decode.</p>
+    </section>
+
+    <section id="ux">
+      <h2>8. Setup and error experience</h2>
+
+      <h3>First setup</h3>
+      <ol>
+        <li>Install the APK and desktop package.</li>
+        <li>Enable USB debugging and approve the computer’s RSA key on the phone.</li>
+        <li>Run <code>openlens doctor</code>; follow the explicit V4L2 prerequisite instructions for v0.1.</li>
+        <li>Connect phone, run <code>openlens start</code>, and approve/start the visible phone session.</li>
+        <li>Add/select Phone Camera in OBS and save the scene.</li>
+      </ol>
+
+      <h3>Required error language</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Condition</th><th>Message</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>ADB missing</td><td>Android Platform Tools were not found.</td><td>Show installation link/instructions or choose executable.</td></tr>
+            <tr><td>Unauthorized</td><td>This computer is waiting for permission from the phone.</td><td>Unlock phone, accept debugging prompt, Retry.</td></tr>
+            <tr><td>Multiple phones</td><td>Choose which Android device to use.</td><td>Show privacy-safe model/serial suffixes.</td></tr>
+            <tr><td>App absent</td><td>The Phone Camera app is not installed on this device.</td><td>Open signed APK instructions; do not silently install.</td></tr>
+            <tr><td>Phone not started</td><td>Approve the camera session on the phone.</td><td>Bring visible activity forward; wait/retry.</td></tr>
+            <tr><td>Preset rejected</td><td>1080p30 is unavailable with this camera/session.</td><td>Offer the nearest certified preset.</td></tr>
+            <tr><td>V4L2 missing</td><td>No usable virtual camera was found.</td><td>Print exact, reviewed setup and recheck command.</td></tr>
+            <tr><td>Hot phone</td><td>The phone is hot; 720p30 is recommended.</td><td>User-confirmed switch; no silent downgrade.</td></tr>
+            <tr><td>Cable removed</td><td>Phone disconnected—waiting for the same device.</td><td>Reconnect for 60 seconds; never select another phone.</td></tr>
+            <tr><td>Version mismatch</td><td>The phone app and desktop component use incompatible protocols.</td><td>Name both versions and compatible download.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <h2>9. Phased build roadmap</h2>
+      <p>Estimates assume one experienced developer. V0.1 alpha is approximately 5–7 weeks after phase-zero approval; v0.2 beta adds approximately 2 weeks.</p>
+
+      <article class="phase">
+        <h3>Phase 0 — Baseline, hardware evidence, stop/go</h3>
+        <p class="phase-meta">2–3 working days · mandatory before product scaffolding</p>
+        <ul class="checks">
+          <li>Record S24 Android/One UI build, USB mode/cable/controller, CachyOS kernel, ADB/FFmpeg, OBS version and package type.</li>
+          <li>Run scrcpy camera → V4L2 → OBS and measure setup, quality, latency, CPU, thermal, controls, reconnect.</li>
+          <li>Check whether this exact S24 build exposes a native USB webcam mode; benchmark it if present.</li>
+          <li>Create capability-dump spike: logical/physical cameras, focal lengths, zoom, sizes/FPS, encoder names/profiles/modes.</li>
+          <li>Prove Camera2 → MediaCodec 1080p30 for 30 minutes and validate exact H.264 output.</li>
+          <li>Prove synthetic/FFmpeg raw frames → v4l2loopback → installed OBS; test I420/NV12/YUYV.</li>
+          <li>Write ADR-001 stop/go and the measured comparison.</li>
+        </ul>
+        <p class="exit">Exit: continue only if the custom app can materially improve controls, OBS workflow, diagnostics, or reliability. If not, reframe the project as a native OBS integration and UI around scrcpy.</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 1 — Foundations and deterministic fixtures</h3>
+        <p class="phase-meta">3–4 working days</p>
+        <ul class="checks">
+          <li>Create monorepo modules, toolchains, CI, formatting, static analysis, tests, and temporary private IDs.</li>
+          <li>Write ADR-002 architecture/sinks, ADR-003 C++20, ADR-004 provisional license, ADR-005 protocol.</li>
+          <li>Implement 36-byte framing in Kotlin/C++ with golden valid/malformed cross-language fixtures and fuzz targets.</li>
+          <li>Create deterministic H.264 samples plus synthetic source and null/file/sink contract.</li>
+          <li>Send synthetic moving frames through V4L2 into OBS without the phone.</li>
+        </ul>
+        <p class="exit">Exit: clean builds pass; cross-language fixtures match byte-for-byte; synthetic OBS video is stable.</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 2 — Android capture engine</h3>
+        <p class="phase-meta">5–7 working days</p>
+        <ul class="checks">
+          <li>Permissions, preview, capability-derived 720p30/1080p30 presets, visible session states.</li>
+          <li>Camera2 dual-Surface capture and MediaCodec H.264 output with actual-format reporting.</li>
+          <li>Rear/front, logical zoom, focus, exposure, torch, mirror, and orientation metadata.</li>
+          <li>Foreground service, notification Stop, lock/background handling, transactional reconfigure.</li>
+          <li>Developer statistics and one-hour local encoder soak.</li>
+        </ul>
+        <p class="exit">Exit: the APK produces valid 1080p30 for one hour without leaks/unbounded queues and handles 50 local start/stops.</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 3 — USB transport and desktop vertical slice</h3>
+        <p class="phase-meta">5–7 working days</p>
+        <ul class="checks">
+          <li>Per-session abstract socket, visible ADB launch, forward ownership, handshake, controls, heartbeat.</li>
+          <li>Desktop ADB manager, bounded parser, FFmpeg decode, normalized frames, stats, cancellation, reconnect.</li>
+          <li>CLI devices/cameras/probe/receive verbs and JSON output.</li>
+          <li>Malformed/fuzz suite plus no-device/offline/unauthorized/multi-device/app-absent/codec-reset matrix.</li>
+          <li>Twenty cable-pull recoveries and glass-to-desktop latency measurement.</li>
+        </ul>
+        <p class="exit">Exit: <code>openlens receive --sink null</code> sustains 1080p30 for one hour and reconnects to the same phone without leaked resources.</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 4 — V4L2/OBS v0.1 alpha</h3>
+        <p class="phase-meta">4–6 working days</p>
+        <ul class="checks">
+          <li>V4L2 discovery, format negotiation, pacing, reconnect slate, write/device-removal errors.</li>
+          <li>Doctor command and reviewed CachyOS/generic Linux prerequisite flow.</li>
+          <li>OBS recording/streaming/scene tests; two-hour soak; 50 cycles; 20 cable pulls.</li>
+          <li>Latency tuning to alpha gates; redacted support bundle and compatibility report.</li>
+          <li>Signed APK + CLI alpha artifacts, checksums, SBOM, build/setup/troubleshooting docs.</li>
+        </ul>
+        <p class="exit">Exit: every v0.1 gate passes on the reference S24/CachyOS/OBS matrix. Tag <code>v0.1.0-alpha.1</code>.</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 5 — Native OBS v0.2 beta</h3>
+        <p class="phase-meta">7–10 working days</p>
+        <ul class="checks">
+          <li>Review OBS/template licenses/toolchain; scaffold plugin and pin supported OBS range.</li>
+          <li>Attach desktop core to asynchronous source output with correct timestamps/color metadata.</li>
+          <li>Source properties/status, duplicate guard, scene lifecycle, reconnect/placeholder UX.</li>
+          <li>Plugin install/uninstall package that leaves unrelated OBS files untouched.</li>
+          <li>Native-package test matrix, two-hour OBS recording, beta latency gates, public name/package ID freeze.</li>
+          <li>Complete security/license/release review; signed APK/CLI/plugin, checksums, SBOM, source, release notes.</li>
+        </ul>
+        <p class="exit">Exit: native Phone Camera matches or beats V4L2 reliability/latency and every v0.2 gate passes. Tag <code>v0.2.0-beta.1</code>.</p>
+      </article>
+
+      <h3>After v0.2</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Release</th><th>Theme</th><th>Candidate work</th></tr></thead>
+          <tbody>
+            <tr><td>0.3</td><td>Audio + quality</td><td>Measure Opus vs AAC-LC, A/V sync, 720p60/1080p60 certification, stabilization controls.</td></tr>
+            <tr><td>0.4</td><td>Windows</td><td>Native OBS package, installer/signing, Windows ADB/FFmpeg packaging.</td></tr>
+            <tr><td>0.5</td><td>Wireless</td><td>Opt-in encrypted Wi-Fi transport, explicit pairing, discovery, no silent fallback.</td></tr>
+            <tr><td>0.6</td><td>macOS</td><td>Native OBS package, notarization, supported architecture policy.</td></tr>
+            <tr><td>0.7+</td><td>Advanced video</td><td>4K/HEVC and HDR only with thermal and end-to-end color validation.</td></tr>
+            <tr><td>1.0</td><td>Stable contract</td><td>Protocol v1, supported matrix, migrations, security response and compatibility policy.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="testing">
+      <h2>10. Testing and evidence</h2>
+
+      <h3>Automated test layers</h3>
+      <div class="grid">
+        <article class="card span-4">
+          <h3>Android</h3>
+          <ul>
+            <li>Capability → preset fallback.</li>
+            <li>Camera/encoder/session state machines.</li>
+            <li>Permission/service lifecycle.</li>
+            <li>Control clamp/applied values.</li>
+            <li>Protocol fixtures and fake encoded source.</li>
+          </ul>
+        </article>
+        <article class="card span-4">
+          <h3>Desktop</h3>
+          <ul>
+            <li>Golden/malformed parser tests and fuzzing.</li>
+            <li>Fake ADB states and safe arguments.</li>
+            <li>Decoder/config/discontinuity fixtures.</li>
+            <li>Color conversion/timestamp tests.</li>
+            <li>Reconnect/cancellation races under sanitizers.</li>
+          </ul>
+        </article>
+        <article class="card span-4">
+          <h3>Sinks/OBS</h3>
+          <ul>
+            <li>V4L2 format/short-write/device-loss.</li>
+            <li>Synthetic frame pacing.</li>
+            <li>OBS source lifecycle/reconfigure.</li>
+            <li>Duplicate device and hidden source.</li>
+            <li>Clean install/uninstall smoke tests.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3>Physical evidence retained for release</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Area</th><th>Cases</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Latency</td><td>720p/1080p, static/motion/low light, after reconnect, OBS idle/recording/streaming.</td><td>High-frame-rate reference video and computed median/p95.</td></tr>
+            <tr><td>Reliability</td><td>2-hour run, 50 cycles, 20 cable pulls, app/OBS restart, lock/unlock.</td><td>Redacted logs, memory/queue graphs, drops, recovery times.</td></tr>
+            <tr><td>Thermal</td><td>Charging, dim/bright preview, warm room, 1080p30.</td><td>Thermal/FPS timeline; no shutdown or hidden downgrade.</td></tr>
+            <tr><td>Controls</td><td>Front/rear, zoom range, near/far focus, exposure range, torch, orientation.</td><td>Visual capture and requested/applied logs.</td></tr>
+            <tr><td>Failures</td><td>ADB/module/app missing, auth/multi-device, unsupported preset, version mismatch.</td><td>Screenshot/copy and observed time to recovery.</td></tr>
+            <tr><td>Privacy</td><td>USB session while host/device traffic is captured; support-bundle review.</td><td>Zero LAN/internet packets; no full serial/frame content.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>CI gates</h3>
+      <ul>
+        <li>Every change: format, lint/static analysis, Kotlin/native builds, unit tests, cross-language fixtures, sanitizers, dependency/license scan.</li>
+        <li>Nightly: fuzz corpus, debug APK/CLI/plugin builds, artifact-install smoke tests where practical.</li>
+        <li>Protocol fixture changes must state compatibility impact and update the normative spec/changelog.</li>
+        <li>Release tags require the physical S24 checklist. Green CI alone cannot promote a release.</li>
+      </ul>
+    </section>
+
+    <section id="security">
+      <h2>11. Privacy, security, and open source</h2>
+
+      <h3>Published promises</h3>
+      <ul>
+        <li>No account, advertisements, analytics, telemetry, cloud service, watermark, or required internet.</li>
+        <li>USB mode uses ADB authorization, per-session device abstract socket, host loopback forward, and explicit visible Start.</li>
+        <li>The camera never starts at boot or secretly in the background; persistent notification while active.</li>
+        <li>No automatic recording. Diagnostic frame/bitstream capture is explicit and saved to a user-selected path.</li>
+        <li>Logs redact device serials and exclude frame contents. Support bundles stay local until the user shares them.</li>
+        <li>Signed artifacts, checksums, SBOM, least-privilege CI, and private vulnerability reporting.</li>
+      </ul>
+
+      <h3>Threat controls</h3>
+      <ul>
+        <li>Protocol input is untrusted: hard payload/dimension limits, checked arithmetic, fuzzing, sanitizers, timeouts.</li>
+        <li>ADB is invoked without a shell and with fixed/generated arguments. No phone-provided string becomes executable text.</li>
+        <li>Second client is rejected; session identifiers are random and short-lived; forwards are removed on normal shutdown.</li>
+        <li>Reconnect is pinned to the same selected serial and never falls back to LAN or a different phone.</li>
+        <li>Kernel/module setup is documented, explicit, and outside the unprivileged program.</li>
+      </ul>
+
+      <h3>Open-source baseline</h3>
+      <ul>
+        <li><code>LICENSE</code>, <code>NOTICE</code>, SPDX policy/headers, generated dependency inventory.</li>
+        <li><code>README</code>, <code>CONTRIBUTING</code>, <code>CODE_OF_CONDUCT</code>, <code>SECURITY</code>, DCO sign-off, issue forms.</li>
+        <li>Honest comparison with scrcpy, any available native webcam mode, and proprietary alternatives.</li>
+        <li>Device-report form collecting redacted probe output and tested preset—not unstructured “doesn’t work” reports.</li>
+        <li>Do not claim general Android/Linux support until a Samsung, Pixel, and mid-range phone plus multiple supported OBS/Linux configurations pass.</li>
+      </ul>
+    </section>
+
+    <section id="repo">
+      <h2>12. Repository and initial backlog</h2>
+
+      <h3>Final monorepo shape</h3>
+      <pre><code>project-root/
+├── android/
+│   ├── app/                     # Compose UI, permissions, foreground service
+│   ├── camera/                  # Camera2 capabilities/session/controls
+│   ├── encoder/                 # MediaCodec configuration/output
+│   └── protocol/                # Kotlin protocol implementation
+├── desktop/
+│   ├── core/                    # ADB, protocol, decoder, reconnect, stats
+│   ├── cli/                     # doctor/devices/cameras/start/probe/receive
+│   ├── sinks/
+│   │   ├── null/
+│   │   ├── file/
+│   │   ├── v4l2/                # v0.1
+│   │   └── obs/                 # v0.2 plugin
+│   └── tests/
+├── protocol/
+│   ├── PROTOCOL.md
+│   ├── CHANGELOG.md
+│   └── fixtures/
+├── docs/
+│   ├── setup/cachyos.md
+│   ├── setup/linux.md
+│   ├── obs.md
+│   ├── troubleshooting.md
+│   ├── privacy.md
+│   ├── architecture/
+│   └── adr/
+├── packaging/linux/
+├── tests/e2e/
+├── plans/                       # all v1/v2/v3 planning inputs
+├── .github/
+├── LICENSE
+├── NOTICE
+├── SECURITY.md
+├── CONTRIBUTING.md
+└── README.md</code></pre>
+
+      <h3>First implementation issues</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Issue</th><th>Definition of done</th></tr></thead>
+          <tbody>
+            <tr><td>P0-01</td><td>Capture reference environment</td><td>Versions/cable/package types recorded in a redacted report.</td></tr>
+            <tr><td>P0-02</td><td>Benchmark scrcpy and native webcam option</td><td>Latency/quality/thermal/setup/reconnect comparison published locally.</td></tr>
+            <tr><td>P0-03</td><td>S24 camera and encoder capability spike</td><td>Machine-readable camera/encoder dump produced.</td></tr>
+            <tr><td>P0-04</td><td>Camera2 → MediaCodec proof</td><td>30-minute valid 1080p30 H.264 sample and stats.</td></tr>
+            <tr><td>P0-05</td><td>V4L2 → OBS format proof</td><td>Moving synthetic pattern records correctly in installed OBS.</td></tr>
+            <tr><td>P0-06</td><td>Stop/go ADR</td><td>Measured decision to build custom stack or reframe around scrcpy.</td></tr>
+            <tr><td>F-01</td><td>Scaffold Android/C++/CI</td><td>Clean checkout builds/tests both toolchains.</td></tr>
+            <tr><td>F-02</td><td>Protocol spec and cross-language fixtures</td><td>Kotlin/C++ produce identical valid bytes and reject malformed corpus.</td></tr>
+            <tr><td>F-03</td><td>Desktop sink contract + synthetic source</td><td>Null/file/V4L2 interfaces work with a deterministic pattern.</td></tr>
+            <tr><td>A-01</td><td>Capability-derived Camera2 preview</td><td>S24 front/rear 720p/1080p preview rotates correctly.</td></tr>
+            <tr><td>A-02</td><td>MediaCodec encoder engine</td><td>One-hour timestamped 1080p30 output with actual-format reporting.</td></tr>
+            <tr><td>A-03</td><td>Controls and lifecycle</td><td>Controls ACK actual values; 50 foreground-service start/stops pass.</td></tr>
+            <tr><td>D-01</td><td>ADB session manager</td><td>Device states, visible launch, per-session forward, cleanup all tested.</td></tr>
+            <tr><td>D-02</td><td>Protocol receive/decode</td><td>One-hour null-sink stream and fuzz/sanitizer suite pass.</td></tr>
+            <tr><td>D-03</td><td>Reconnect and diagnostics</td><td>20 cable pulls plus doctor/probe JSON pass.</td></tr>
+            <tr><td>L-01</td><td>V4L2 sink</td><td>Negotiated phone frames and reconnect slate appear in OBS.</td></tr>
+            <tr><td>L-02</td><td>v0.1 acceptance/release</td><td>All alpha gates and signed-artifact checklist pass.</td></tr>
+            <tr><td>O-01</td><td>Native OBS source</td><td>Shared-core decoded frames publish with correct timing/color.</td></tr>
+            <tr><td>O-02</td><td>OBS properties/lifecycle/reconnect</td><td>All beta source UX and lifecycle cases pass.</td></tr>
+            <tr><td>O-03</td><td>v0.2 acceptance/release</td><td>All beta gates and signed package checklist pass.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="risks">
+      <h2>13. Risk register</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Risk</th><th>Level</th><th>Mitigation / trigger</th></tr></thead>
+          <tbody>
+            <tr><td>scrcpy already solves the problem</td><td><span class="badge stop">Stop/go</span></td><td>Phase-zero measured comparison; reframe instead of duplicating if product advantage is weak.</td></tr>
+            <tr><td>V4L2/DKMS friction on CachyOS kernels</td><td>High</td><td>Doctor/manual setup, format/module evidence, native plugin immediately after alpha.</td></tr>
+            <tr><td>Samsung hides/ignores physical lens control</td><td>High</td><td>Logical zoom baseline; diagnostics first; no physical-lens promise.</td></tr>
+            <tr><td>Thermal throttling while charging</td><td>High</td><td>Surface path, 1080p30, dim preview, thermal stats, explicit 720p prompt, soak.</td></tr>
+            <tr><td>Hidden buffering</td><td>High</td><td>Bound queues, one-second GOP, no B-frames when proven, stage metrics, drop stale work.</td></tr>
+            <tr><td>C++ parser memory safety</td><td>Medium/high</td><td>Small parser, spans/checked sizes, fuzzing, ASan/UBSan, hard limits, code review.</td></tr>
+            <tr><td>ADB setup/security perception</td><td>Medium</td><td>Doctor/guided copy, explicit trust explanation, local session, revoke guidance.</td></tr>
+            <tr><td>OBS ABI/package fragmentation</td><td>Medium/high</td><td>Official toolchain guidance, pinned matrix, native package first, V4L2 fallback.</td></tr>
+            <tr><td>License incompatibility</td><td>Medium/high</td><td>One provisional license, clean-room code, generated inventory, review before binaries.</td></tr>
+            <tr><td>Background-camera changes in Android</td><td>Medium</td><td>Visible-start foreground service and current target-SDK/One UI instrumentation.</td></tr>
+            <tr><td>Public name collision</td><td>High</td><td>Codename only; shortlist/domain/applicationId/trademark screening before beta.</td></tr>
+            <tr><td>Audio derails video quality</td><td>High</td><td>Protocol reserves streams; no audio work before v0.2 passes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="goahead">
+      <h2>14. Go-ahead execution contract</h2>
+
+      <div class="callout">
+        <strong>When approval is given, implementation begins with Phase 0 only.</strong> Phase 0 is evidence-gathering and reversible prototyping on the S24 Ultra/CachyOS machine. Its result is the stop/go ADR. If the result is “go,” work continues through the frozen v3 architecture; if “reframe,” the implementation switches to a scrcpy-based OBS integration without preserving sunk-code assumptions.
+      </div>
+
+      <h3>Actions authorized by a build go-ahead</h3>
+      <ul>
+        <li>Create the repository structure, spike Android project, C++ proof tools, tests, ADRs, and documentation described here.</li>
+        <li>Inspect local Android/OBS/ADB/FFmpeg/kernel/V4L2 state and build/run unprivileged local prototypes.</li>
+        <li>Build/install a debug APK to the explicitly connected S24 through the already-authorized ADB relationship.</li>
+        <li>Run camera/encoder/latency/soak/reconnect tests and create local diagnostic artifacts.</li>
+      </ul>
+
+      <h3>Actions that still require explicit approval when encountered</h3>
+      <ul>
+        <li>Installing system packages, loading/configuring kernel modules, or any privileged host mutation.</li>
+        <li>Publishing a repository/release, creating external accounts/domains, sending data, or distributing artifacts.</li>
+        <li>Choosing and registering the public name, permanent application ID, signing identity, or domain.</li>
+        <li>Any destructive cleanup outside generated build artifacts.</li>
+      </ul>
+
+      <h3>Phase-zero output before major product work</h3>
+      <ol>
+        <li>Environment/capability report.</li>
+        <li>scrcpy/native alternative comparison.</li>
+        <li>Camera2/MediaCodec proof result.</li>
+        <li>V4L2/OBS format proof result.</li>
+        <li>Measured stop/go ADR and any necessary v3 amendment.</li>
+      </ol>
+    </section>
+
+    <section id="sources">
+      <h2>15. Primary references</h2>
+      <ul class="sources">
+        <li><a href="https://developer.android.com/tools/adb">Android Debug Bridge</a> — authorization, device states, activity commands, forwarding.</li>
+        <li><a href="https://developer.android.com/reference/android/media/MediaCodec">Android MediaCodec</a> — Surface-input hardware encoder and codec output.</li>
+        <li><a href="https://developer.android.com/media/camera/camera2/capture-sessions-requests">Camera2 capture sessions and requests</a> — repeating multi-Surface capture.</li>
+        <li><a href="https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics">CameraCharacteristics</a> and <a href="https://developer.android.com/reference/android/hardware/camera2/CaptureRequest">CaptureRequest</a> — capability and control contracts.</li>
+        <li><a href="https://developer.android.com/develop/background-work/services/fgs/service-types">Android foreground service types</a> — current camera service requirements.</li>
+        <li><a href="https://docs.obsproject.com/plugins">OBS plugin documentation</a> and <a href="https://github.com/obsproject/obs-plugintemplate">official plugin template</a>.</li>
+        <li><a href="https://github.com/Genymobile/scrcpy">scrcpy</a> — camera-over-ADB/V4L2 prior art and required phase-zero baseline.</li>
+        <li><a href="https://github.com/v4l2loopback/v4l2loopback">v4l2loopback</a> — Linux virtual-camera implementation.</li>
+        <li><a href="https://raw.githubusercontent.com/obsproject/obs-studio/master/COPYING">OBS Studio license</a> and <a href="https://raw.githubusercontent.com/obsproject/obs-plugintemplate/master/LICENSE">OBS plugin-template license</a> — inputs to the pre-release review.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="shell">
+    <p>Final plan v3 · synthesized from Claude v2 and Codex v2 · repository codename “openlens” · 8 August 2026</p>
+  </footer>
+</body>
+</html>

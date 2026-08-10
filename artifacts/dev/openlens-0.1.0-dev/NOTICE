@@ -1,0 +1,10 @@
+OpenLens
+Copyright (C) 2026 OpenLens contributors
+
+Original project code is GPL-2.0-or-later. The project uses, but does not copy
+source from, Android SDK/Jetpack, FFmpeg, OpenSSL, Avahi, and libobs components.
+Their licenses remain their own. See docs/dependencies.md for the build-time
+inventory and perform a generated release inventory before distribution.
+
+The OpenLens codename, temporary application ID, and debug signing identity
+are development placeholders, not a public branding or signing decision.

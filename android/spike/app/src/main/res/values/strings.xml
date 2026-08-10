@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenLens Phase 0</string>
+    <string name="title">Phone Camera — Phase 0</string>
+    <string name="scan_capabilities">Scan camera + encoder capabilities</string>
+    <string name="run_probe">Run 30-second 1080p30 probe</string>
+    <string name="stop_probe">Stop active probe</string>
+</resources>

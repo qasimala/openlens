@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenLens Wi-Fi Migration Plan v2</title>
+  <style>
+    :root{color-scheme:dark;--bg:#06110d;--panel:#0d2119;--panel2:#102a20;--line:#294b3d;--text:#ecfff6;--muted:#9ebbac;--green:#38d996;--blue:#75bfff;--amber:#f3c969;--red:#ff8078;--code:#071913}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--text);background:radial-gradient(circle at 85% 0,#123c2c 0,var(--bg) 34rem);font:16px/1.58 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1180px,calc(100% - 32px));margin:auto;padding:34px 0 80px}header,section{margin:0 0 20px;padding:25px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--panel) 95%,transparent);box-shadow:0 18px 55px rgba(0,0,0,.22)}header{padding:34px}
+    h1,h2,h3,h4{line-height:1.2;margin-top:0}h1{margin-bottom:7px;font-size:clamp(2rem,5vw,3.65rem)}h2{color:#c5f6df;font-size:1.55rem}h3{color:#a9ddc5;margin-top:28px}h4{color:#bce8d4;margin:18px 0 7px}p:last-child{margin-bottom:0}a{color:#8ed0ff}
+    code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}code{color:#b8f4d9;overflow-wrap:anywhere}pre{padding:16px;border:1px solid #244536;border-radius:12px;background:var(--code);color:#dfffee;overflow:auto;white-space:pre-wrap}
+    table{width:100%;margin:14px 0;border-collapse:collapse}th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:#c2efd9;background:rgba(255,255,255,.025)}tr:last-child td{border-bottom:0}ul,ol{padding-left:24px}li+li{margin-top:7px}
+    .subtitle{margin:0 0 18px;color:var(--muted);font-size:1.1rem}.meta{display:flex;flex-wrap:wrap;gap:8px}.pill,.status{display:inline-block;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel2);color:#c4ebd9;font-size:.85rem;font-weight:750}.pass{color:var(--green)}.warn{color:var(--amber)}.risk{color:var(--red)}.info{color:var(--blue)}
+    .callout{margin:14px 0;padding:14px 16px;border-left:4px solid var(--green);border-radius:10px;background:rgba(56,217,150,.08)}.callout.security{border-left-color:var(--blue);background:rgba(117,191,255,.08)}.callout.warning{border-left-color:var(--amber);background:rgba(243,201,105,.08)}.callout.danger{border-left-color:var(--red);background:rgba(255,128,120,.08)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:14px}.card{padding:16px;border:1px solid var(--line);border-radius:13px;background:var(--panel2)}.card h3{margin:0 0 8px;font-size:1.06rem}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.flow>div{position:relative;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);text-align:center}.flow>div:not(:last-child)::after{content:"→";position:absolute;right:-17px;top:35%;color:var(--green);z-index:2}
+    .toc{columns:2;column-gap:34px}.toc li{break-inside:avoid}.check li{list-style:"☐  ";padding-left:4px}.small{color:var(--muted);font-size:.9rem}.phase{border-left:3px solid var(--green);padding-left:18px;margin:28px 0}.changed{background:rgba(117,191,255,.06)}
+    @media(max-width:850px){.flow{grid-template-columns:1fr}.flow>div:not(:last-child)::after{content:"↓";right:auto;left:49%;top:auto;bottom:-22px}.toc{columns:1}table{display:block;overflow-x:auto}}
+    @media print{:root{color-scheme:light}body{background:#fff;color:#111}main{width:100%;padding:0}header,section,.card{background:#fff;color:#111;box-shadow:none}h2,h3,h4,th,.subtitle,.small{color:#333}code,pre{color:#111;background:#f5f5f5}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="meta">
+      <span class="pill">OpenLens Wi-Fi migration</span>
+      <span class="pill">Plan v2</span>
+      <span class="pill">2026-08-10</span>
+      <span class="pill">Claude review incorporated</span>
+    </div>
+    <h1>OpenLens without ADB</h1>
+    <p class="subtitle">Revised implementation plan for local Wi-Fi discovery, commitment-based one-time pairing, pinned mutual TLS, encrypted camera transport, and automatic reconnection.</p>
+    <div class="callout">
+      <strong>Target experience:</strong> first use requires one matching six-digit code confirmed on both devices. Later use is: connect to the same local network, open both apps, and click <strong>Start camera</strong> on the PC. No ADB, cable, IP address, account, cloud service, or per-session phone confirmation.
+    </div>
+    <p><strong>Repository:</strong> <code>/home/qasim/Dev/openlens</code><br>
+       <strong>Supersedes:</strong> <code>plans/codex/wifi-migration-plan-v1.html</code><br>
+       <strong>Review incorporated:</strong> <code>plans/claude/wifi-migration-review-v1.html</code></p>
+  </header>
+
+  <section id="changes">
+    <h2>0. v1 review resolution matrix</h2>
+    <table>
+      <thead><tr><th>Review point</th><th>v2 resolution</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr class="changed"><td>Critical: certificate-only six-digit SAS is grindable.</td><td>Replaced with a symmetric commit-before-reveal exchange using fresh 256-bit nonces, role-bound SPKI pins, attempt ID and dual confirmation. Phase 2 remains blocked pending independent crypto review and shared test vectors.</td><td><span class="status pass">Resolved in design</span></td></tr>
+        <tr><td>ADB abstract-socket path is unsafe to ship.</td><td>ADB becomes development-only at compile time. Release APK/binaries must contain no ADB transport, exported ADB launch entry point or Platform Tools dependency.</td><td><span class="status pass">Hard release gate</span></td></tr>
+        <tr><td><code>connectedDevice</code> FGS likely unnecessary.</td><td>Default design uses <code>camera</code> FGS only. Phase 0 must prove background streaming. Add <code>connectedDevice</code> only through a new ADR backed by a failing device test.</td><td><span class="status pass">Revised</span></td></tr>
+        <tr><td>No current latency baseline.</td><td>ADB glass-to-OBS latency measurement moves into Phase 0 before transport refactoring.</td><td><span class="status pass">Revised</span></td></tr>
+        <tr><td>Certificate expiry/pin lifetime unspecified.</td><td>Trust pins SHA-256 of DER SubjectPublicKeyInfo. Pinned identity validity is not tied to X.509 <code>NotAfter</code>; certificates use long validity and key rotation always requires explicit re-pairing.</td><td><span class="status pass">Frozen</span></td></tr>
+        <tr><td>Personal mDNS friendly name.</td><td>Default service name is <strong>OpenLens phone</strong>; personal naming is optional and clearly described as LAN-visible.</td><td><span class="status pass">Revised</span></td></tr>
+        <tr><td>Stable UUID is trackable.</td><td>Documented explicitly; advertised only while the app is intentionally available. Phase 0 evaluates omitting it and identifying only after TLS.</td><td><span class="status warn">Evaluate</span></td></tr>
+        <tr><td>Constant-time pin checks.</td><td>Full 32-byte pin comparisons are unconditionally constant-time. Visual six-digit comparison is outside the hot authentication path.</td><td><span class="status pass">Required</span></td></tr>
+        <tr><td>Avahi absence/manual address fallback.</td><td>Clear daemon diagnostics plus advanced manual host/port entry. Manual mode always performs strict pinned mTLS.</td><td><span class="status pass">Added</span></td></tr>
+        <tr><td>TLS accept-loop denial of service.</td><td>Explicit handshake rate limit, one pairing connection, bounded authenticated clients and half-open socket cap.</td><td><span class="status pass">Added</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Contents</h2>
+    <ol class="toc">
+      <li><a href="#decisions">Frozen decisions</a></li>
+      <li><a href="#journey">User journey</a></li>
+      <li><a href="#scope">Scope and non-goals</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#threat">Threat model</a></li>
+      <li><a href="#pairing">Revised pairing protocol</a></li>
+      <li><a href="#identity">Identity and pin policy</a></li>
+      <li><a href="#discovery">Discovery</a></li>
+      <li><a href="#android">Android design</a></li>
+      <li><a href="#desktop">Desktop design</a></li>
+      <li><a href="#protocol">Protocol v2</a></li>
+      <li><a href="#recovery">Recovery and performance</a></li>
+      <li><a href="#adb">ADB migration and removal</a></li>
+      <li><a href="#phases">Implementation phases</a></li>
+      <li><a href="#tests">Tests and release gates</a></li>
+      <li><a href="#risks">Risks</a></li>
+      <li><a href="#files">Expected file changes</a></li>
+      <li><a href="#review">Claude v2 review request</a></li>
+    </ol>
+  </section>
+
+  <section id="decisions">
+    <h2>1. Frozen decisions</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td>Transport</td><td>Local TCP protected by TLS 1.3. No plaintext mode.</td></tr>
+        <tr><td>Discovery</td><td>DNS-SD/mDNS service <code>_openlens._tcp.</code>; Android <code>NsdManager</code>, Linux Avahi.</td></tr>
+        <tr><td>Pairing</td><td>One-time mutual certificate enrollment using symmetric commitment-based six-digit numeric comparison and confirmation on both devices.</td></tr>
+        <tr><td>Normal authentication</td><td>Mutual TLS with exact pinned SPKI SHA-256 values.</td></tr>
+        <tr><td>Session owner</td><td>The PC owns Start/Stop. Opening apps advertises availability but does not silently activate the camera.</td></tr>
+        <tr><td>Later sessions</td><td>Previously paired phone is discovered and authenticated automatically; no repeated code or phone tap.</td></tr>
+        <tr><td>Internet</td><td>None. No relay, cloud account, telemetry or Wi-Fi fallback to an internet service.</td></tr>
+        <tr><td>Release ADB policy</td><td>No ADB transport in release artifacts. Temporary developer-only source sets/build flags are allowed during migration.</td></tr>
+        <tr><td>Foreground service</td><td><code>camera</code> only unless Phase 0 proves another type is necessary.</td></tr>
+        <tr><td>Supported baseline</td><td>Android 12+ (API 31+) and native Linux desktop/OBS.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="journey">
+    <h2>2. User journey</h2>
+    <h3>2.1 First pairing</h3>
+    <ol>
+      <li>Install and open both apps on the same trusted local network.</li>
+      <li>Android requests Camera and any Android-version-appropriate local-network permission.</li>
+      <li>The phone advertises <strong>OpenLens phone</strong> and opens a two-minute pairing window while the pairing screen is visible.</li>
+      <li>The desktop discovers it and the user chooses <strong>Pair</strong>.</li>
+      <li>An initial mutual TLS connection proves possession of both self-signed identity keys. This connection is isolated from normal strict-pinning contexts.</li>
+      <li>The revised commit–reveal protocol produces the same six-digit code on phone and desktop.</li>
+      <li>The user checks the codes and presses <strong>Codes match</strong> on both devices.</li>
+      <li>Both sides atomically save the peer SPKI pin and friendly name, close pairing mode, and reconnect under strict pinned mutual TLS.</li>
+    </ol>
+    <h3>2.2 Normal use</h3>
+    <ol>
+      <li>Open both apps on the same LAN.</li>
+      <li>The desktop finds and strictly authenticates the paired phone.</li>
+      <li>Click <strong>Start camera</strong> on the PC. No phone confirmation is required.</li>
+      <li>Use the desktop preview, V4L2 device or native OBS source.</li>
+      <li>Stop from the PC; the phone retains Android's privacy indicator, foreground notification and emergency Stop while streaming.</li>
+    </ol>
+  </section>
+
+  <section id="scope">
+    <h2>3. Scope and non-goals</h2>
+    <div class="grid">
+      <div class="card"><h3>In scope</h3><ul><li>Same-LAN discovery.</li><li>Encrypted mutual authentication.</li><li>One-time pairing and revocation.</li><li>Existing H.264 camera protocol over TLS.</li><li>Automatic rediscovery/reconnect.</li><li>Android and Qt pairing UI.</li><li>V4L2 and native OBS paths.</li><li>Manual pinned host fallback.</li></ul></div>
+      <div class="card"><h3>Out of scope</h3><ul><li>Internet or cloud relay.</li><li>WebRTC/STUN/TURN.</li><li>Unauthenticated LAN access.</li><li>iOS or audio.</li><li>Boot-time/background advertising.</li><li>Router configuration.</li><li>Public signing/identity decisions.</li><li>Supporting ADB as a user workflow.</li></ul></div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>4. Architecture</h2>
+    <div class="flow">
+      <div><strong>Android</strong><br><span class="small">Camera2 + MediaCodec</span></div>
+      <div><strong>mTLS server</strong><br><span class="small">Pinned SPKI identities</span></div>
+      <div><strong>Local Wi-Fi</strong><br><span class="small">mDNS + TCP/TLS</span></div>
+      <div><strong>Desktop</strong><br><span class="small">OpenSSL + protocol + FFmpeg</span></div>
+      <div><strong>OBS</strong><br><span class="small">V4L2 or native source</span></div>
+    </div>
+    <h3>4.1 Required abstractions</h3>
+    <ul>
+      <li><code>SessionTransport</code>: read, write-all, close, peer identity and liveness.</li>
+      <li><code>TransportProvider</code>: establish a normal authenticated session. Wi-Fi is production; ADB is a development-only source-set provider during migration.</li>
+      <li><code>DeviceDiscovery</code>: found/updated/lost device records without camera logic.</li>
+      <li><code>IdentityStore</code>: local key/certificate, peer SPKI pins, names, timestamps and revocation.</li>
+      <li><code>PairingCoordinator</code>: isolated pairing TLS context, commitments, reveals, SAS, dual confirmation and atomic commit.</li>
+      <li><code>ConnectionState</code>: one tested state model shared by UI and session logic.</li>
+    </ul>
+    <p>The camera, encoder, protocol framing, decoder and output sinks remain transport-agnostic.</p>
+  </section>
+
+  <section id="threat">
+    <h2>5. Threat model and invariants</h2>
+    <h3>5.1 Defend against</h3>
+    <ul>
+      <li>Passive LAN observers attempting to view video, controls or identity credentials.</li>
+      <li>Active LAN clients attempting to start/control the camera or impersonate a paired peer.</li>
+      <li>Active TLS-terminating MITM during first pairing, including certificate-grinding attackers.</li>
+      <li>Replay of pairing messages or confirmations from another attempt.</li>
+      <li>Friendly-name spoofing, duplicate mDNS names and IP address changes.</li>
+      <li>Connection floods, slow handshakes, oversized protocol messages and unbounded media queues.</li>
+      <li>Stale/changed identities after reinstall, reset or key loss.</li>
+    </ul>
+    <h3>5.2 Not claimed</h3>
+    <ul>
+      <li>Security if the user confirms different pairing codes or both endpoints are already compromised.</li>
+      <li>Protection from an attacker who can read either app's private storage or control its process.</li>
+      <li>Anonymity from LAN observers while the phone intentionally advertises an OpenLens service.</li>
+      <li>Availability against a network administrator who blocks multicast or device-to-device traffic.</li>
+    </ul>
+    <h3>5.3 Non-negotiable invariants</h3>
+    <ol>
+      <li>Permissive certificate acceptance exists only in a short-lived pairing-specific <code>SSLContext</code>.</li>
+      <li>Normal sessions require exact constant-time SPKI pin matches on both sides.</li>
+      <li>Pairing records are committed only after both local users confirm the same SAS.</li>
+      <li>All pairing values are bound to the TLS-presented keys, endpoint roles and unique attempt ID.</li>
+      <li>Camera activation is impossible on pairing or unauthenticated sockets.</li>
+      <li>Release builds contain no ADB session provider.</li>
+    </ol>
+  </section>
+
+  <section id="pairing">
+    <h2>6. Revised pairing protocol</h2>
+    <div class="callout danger">
+      <strong>Security gate:</strong> this protocol replaces v1's grindable certificate-only SAS. It must receive independent cryptographic review and cross-language test vectors before Phase 2 implementation is approved.
+    </div>
+
+    <h3>6.1 Inputs and notation</h3>
+    <table>
+      <thead><tr><th>Name</th><th>Definition</th></tr></thead>
+      <tbody>
+        <tr><td><code>attempt</code></td><td>256-bit cryptographically random pairing-attempt ID generated by the phone.</td></tr>
+        <tr><td><code>Np</code>, <code>Nd</code></td><td>Independent 256-bit cryptographically random nonces generated by phone and desktop.</td></tr>
+        <tr><td><code>Pp</code>, <code>Pd</code></td><td>SHA-256 of the exact DER SubjectPublicKeyInfo presented by phone and desktop in the active TLS handshake.</td></tr>
+        <tr><td><code>role</code></td><td>One-byte fixed role identifier: <code>0x01</code> phone, <code>0x02</code> desktop.</td></tr>
+        <tr><td><code>H</code></td><td>SHA-256 over exact byte strings. Every construction has a distinct UTF-8 domain label and fixed-width fields.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.2 Pairing connection prerequisites</h3>
+    <ol>
+      <li>The phone pairing screen is visible, the two-minute pairing window is open, and no other pairing attempt exists.</li>
+      <li>Both endpoints use TLS 1.3 and present their persistent self-signed identity certificate.</li>
+      <li>The pairing-only trust managers accept structurally valid supported certificates solely to complete this enrollment handshake. They record the actual TLS peer SPKI; claimed fingerprints inside messages are never trusted.</li>
+      <li>Each endpoint proves possession of its certificate private key through TLS CertificateVerify.</li>
+    </ol>
+
+    <h3>6.3 Symmetric commit-before-reveal exchange</h3>
+    <pre>Canonical key order is role-specific, never lexicographically sorted:
+  keys = Pp || Pd
+
+Phone commitment:
+  Cp = H("OpenLens Pair v2 commit" || attempt || 0x01 || Np || keys)
+
+Desktop commitment:
+  Cd = H("OpenLens Pair v2 commit" || attempt || 0x02 || Nd || keys)
+
+Exchange order:
+  1. Phone → Desktop: PAIR_BEGIN(attempt, protocol version, display name)
+  2. Both independently generate their nonce.
+  3. Phone → Desktop: PAIR_COMMIT(role=phone, Cp)
+  4. Desktop → Phone: PAIR_COMMIT(role=desktop, Cd)
+  5. Phone → Desktop: PAIR_REVEAL(role=phone, Np)
+  6. Desktop verifies Cp in constant time; aborts on failure.
+  7. Desktop → Phone: PAIR_REVEAL(role=desktop, Nd)
+  8. Phone verifies Cd in constant time; aborts on failure.
+  9. Both compute transcript and SAS.</pre>
+    <p>Both commitments are fixed before either party learns the other nonce. A TLS-terminating MITM must choose and prove its two certificate keys before the fresh committed values are revealed, preventing the certificate grinding attack from v1.</p>
+
+    <h3>6.4 Transcript and six-digit SAS</h3>
+    <pre>T = H("OpenLens Pair v2 transcript" ||
+      attempt || Pp || Pd || Cp || Cd || Np || Nd)
+
+SAS_material = H("OpenLens Pair v2 sas" || T)
+
+SAS = UniformSixDigits(SAS_material)
+
+Display exactly six zero-padded decimal digits on both devices.</pre>
+    <p><code>UniformSixDigits</code> must be defined byte-for-byte in the protocol specification using rejection sampling, with shared Kotlin/C++ test vectors. Direct language-specific integer parsing or an unspecified modulo operation is forbidden.</p>
+
+    <h3>6.5 Dual confirmation and atomic trust commit</h3>
+    <ol>
+      <li>Both screens display the SAS, peer role/name, countdown and explicit Match/Cancel controls.</li>
+      <li>Each sends <code>PAIR_CONFIRM(attempt, T, matched=true)</code> only after its local user confirms.</li>
+      <li>Neither side writes a peer pin until it receives a valid confirmation bound to the same <code>attempt</code> and transcript <code>T</code>, and its own user has also confirmed.</li>
+      <li>Both send <code>PAIR_COMMIT_RESULT</code>, atomically store <code>peer device record + peer SPKI pin</code>, then close the pairing TLS socket.</li>
+      <li>A normal connection is established using a separate strict-pinning TLS context. Pairing success is not considered operational until this connection succeeds.</li>
+      <li>Cancel, mismatch, timeout, socket loss or malformed data erases all provisional state.</li>
+    </ol>
+
+    <h3>6.6 Attempt controls</h3>
+    <ul>
+      <li>One active pairing socket and attempt per phone.</li>
+      <li>Two-minute pairing window; 30-second code-confirmation deadline.</li>
+      <li>At most five failed attempts per window, followed by a cooldown.</li>
+      <li>Maximum two concurrent TLS handshakes total and five new handshakes per 10 seconds per source address, with a global cap.</li>
+      <li>No pairing messages on strict normal-session listeners; no normal START/CONFIGURE on pairing listeners.</li>
+    </ul>
+    <p class="small">A six-digit SAS provides approximately 20 bits of human comparison strength. With commitments, fresh nonces, one active attempt and five-attempt limit, an online active attack is bounded near five chances in one million per pairing window. This remains subject to external review.</p>
+  </section>
+
+  <section id="identity">
+    <h2>7. Identity, certificate and pin policy</h2>
+    <h3>7.1 Phone identity</h3>
+    <ul>
+      <li>Generate an EC P-256 signing key in Android Keystore using <code>KeyGenParameterSpec</code>; private key is non-exportable.</li>
+      <li>Create a self-signed X.509 identity certificate with a long validity window and no personal subject data.</li>
+      <li>Use a random installation UUID, never IMEI, Android ID, MAC address or ADB serial.</li>
+    </ul>
+    <h3>7.2 Desktop identity</h3>
+    <ul>
+      <li>Generate EC P-256 key/certificate through OpenSSL.</li>
+      <li>Write the private key atomically under the OpenLens configuration directory with mode <code>0600</code>; reject broader permissions until repaired.</li>
+      <li>Exclude keys and trust databases from developer bundles, logs and backups created by OpenLens.</li>
+    </ul>
+    <h3>7.3 Trust semantics</h3>
+    <ul>
+      <li>Trust anchor is <code>SHA-256(DER SubjectPublicKeyInfo)</code>, not the full certificate, CA chain, hostname or friendly name.</li>
+      <li>After pairing, custom strict trust managers require the exact pin in constant time and validate proof of private-key possession through TLS.</li>
+      <li><code>NotBefore</code>/<code>NotAfter</code> do not silently invalidate an already pinned identity. Certificates are long-lived transport containers for pinned keys; validity dates are diagnostic.</li>
+      <li>Key change always produces <strong>Identity changed — re-pair required</strong>. Never replace a pin automatically.</li>
+      <li>Reissuing a certificate with the same SPKI may be accepted because the pin remains unchanged, subject to structural/key-use validation.</li>
+      <li>Identity reset and peer revocation are explicit UI operations with confirmation.</li>
+    </ul>
+  </section>
+
+  <section id="discovery">
+    <h2>8. Discovery and LAN privacy</h2>
+    <p>Android advertises <code>_openlens._tcp.</code> through <code>NsdManager</code>; Linux browses/resolves using <code>libavahi-client</code>.</p>
+    <table>
+      <thead><tr><th>TXT key</th><th>Value</th><th>Privacy/validation</th></tr></thead>
+      <tbody>
+        <tr><td><code>v</code></td><td>Protocol major <code>2</code></td><td>Required numeric allow-list.</td></tr>
+        <tr><td><code>tls</code></td><td><code>1</code></td><td>Clients reject missing/false.</td></tr>
+        <tr><td><code>pair</code></td><td><code>0</code>/<code>1</code></td><td>Informational; server state is authoritative.</td></tr>
+        <tr><td><code>busy</code></td><td><code>0</code>/<code>1</code></td><td>Informational only.</td></tr>
+        <tr><td><code>id</code></td><td>Random installation UUID</td><td>LAN-linkable while advertised. Phase 0 evaluates omission; never derived from hardware.</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Default service instance/friendly name: <strong>OpenLens phone</strong>. User-selected personal names display a LAN visibility warning.</li>
+      <li>Do not publish pairing code, certificate/SPKI pin, model, serial, IP address or camera capabilities in TXT.</li>
+      <li>Advertise only while the Android app is intentionally available; pairing advertisement only while pairing screen is visible.</li>
+      <li>Resolve IPv4 and IPv6 and preserve Avahi interface/scope IDs for link-local IPv6.</li>
+      <li>If Avahi is missing/stopped, desktop shows an actionable diagnostic.</li>
+      <li>Advanced manual host/port entry requires selecting an already paired identity or entering pairing mode; it never bypasses mTLS or pin checks.</li>
+    </ul>
+  </section>
+
+  <section id="android">
+    <h2>9. Android design</h2>
+    <h3>9.1 Components</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td><code>WifiHostController</code></td><td>TLS listener, bounded accept/handshake executor, NSD registration and address/network changes.</td></tr>
+        <tr><td><code>AndroidIdentityStore</code></td><td>Keystore identity, installation ID, peer pins and atomic revocation records.</td></tr>
+        <tr><td><code>PairingCoordinatorV2</code></td><td>Isolated TLS context, commitments/reveals, shared vectors, dual confirmation and attempt limits.</td></tr>
+        <tr><td><code>TlsSocketTransport</code></td><td>Adapt authenticated <code>SSLSocket</code> streams to the framed session protocol.</td></tr>
+        <tr><td><code>CameraStreamingService</code></td><td>Transport-neutral Camera2/MediaCodec owner and camera foreground service.</td></tr>
+        <tr><td><code>ConnectionViewModel</code></td><td>Compose state: offline, advertising, pairing, ready, connecting, streaming, reconnecting and error.</td></tr>
+      </tbody>
+    </table>
+    <h3>9.2 Lifecycle</h3>
+    <ol>
+      <li>While the activity is visible, a bound controller advertises and accepts bounded TLS connections without opening the camera or starting a foreground service.</li>
+      <li>After strict mTLS authentication and desktop START while the activity is foreground, promote <code>CameraStreamingService</code> using the <code>camera</code> FGS type and open Camera2.</li>
+      <li>The camera FGS owns the active socket for the stream. Phase 0 must prove this remains alive while backgrounded.</li>
+      <li>On Stop/error, close camera, encoder, TLS socket and FGS. Resume advertising only if the app remains intentionally available.</li>
+      <li>Stop idle advertising when the app leaves the foreground. No boot receiver or hidden background listener.</li>
+    </ol>
+    <div class="callout warning"><strong>FGS rule:</strong> do not add <code>connectedDevice</code>, <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code> or a qualifying network-state permission unless Phase 0 produces a reproducible failure with camera-only FGS and an ADR approves the change.</div>
+    <h3>9.3 Permissions</h3>
+    <ul>
+      <li>Add <code>INTERNET</code>.</li>
+      <li>Keep <code>CAMERA</code>, <code>FOREGROUND_SERVICE</code> and <code>FOREGROUND_SERVICE_CAMERA</code>.</li>
+      <li>Target SDK 36: follow current Android guidance; test Android 16 restricted-local-network compatibility mode.</li>
+      <li>Before target SDK 37, implement the Android 17 local-network permission/system-picker strategy and graceful denial/revocation UX.</li>
+      <li>Do not request location merely for discovery.</li>
+    </ul>
+    <h3>9.4 UI</h3>
+    <ul>
+      <li>Offline/Wi-Fi guidance.</li>
+      <li>Ready and paired-computer management.</li>
+      <li>Large six-digit pairing code, countdown, peer name and Match/Cancel.</li>
+      <li>Streaming preview/stats, connected computer and emergency Stop.</li>
+      <li>Identity-changed, permission-denied, network-isolated and busy errors.</li>
+      <li>Rotation must preserve the camera and network session.</li>
+    </ul>
+  </section>
+
+  <section id="desktop">
+    <h2>10. Linux desktop design</h2>
+    <h3>10.1 Core</h3>
+    <ul>
+      <li>Use <code>libavahi-client</code>/<code>avahi-common</code> for browsing/resolution.</li>
+      <li>Use OpenSSL 3 for TLS 1.3, EC identity generation, SPKI extraction and custom pin verification.</li>
+      <li>Add discovery, identity store, pairing coordinator, TLS transport and state-machine modules.</li>
+      <li>Refactor <code>OpenLensSession</code> to accept a transport provider rather than create ADB forwarding internally.</li>
+      <li>Preserve FFmpeg decoding, transforms, V4L2 and native OBS output.</li>
+    </ul>
+    <h3>10.2 GUI</h3>
+    <ul>
+      <li>Replace USB/ADB readiness with Wi-Fi, discovery, pairing, virtual camera and OBS cards.</li>
+      <li>Automatically select the sole/last paired reachable phone.</li>
+      <li>Pairing dialog displays the v2 SAS and requires local confirmation.</li>
+      <li>Add Pair phone, Forget, manual host diagnostic and Avahi repair guidance.</li>
+      <li>Enable safe live controls; controlled restart for camera/preset changes.</li>
+      <li>Never show raw IPs/certificates in normal UI.</li>
+    </ul>
+    <h3>10.3 CLI</h3>
+    <pre>openlens wifi devices [--json]
+openlens wifi pair [--host HOST --port PORT]
+openlens wifi forget --device ID
+openlens start [--device ID] [camera options]
+openlens doctor [--json]
+
+# Development builds only; absent from release help/binary
+openlens start --transport adb --device SERIAL</pre>
+  </section>
+
+  <section id="protocol">
+    <h2>11. Protocol v2</h2>
+    <p>Retain the proven bounded binary framing and media messages inside TLS. Increment the major version for Wi-Fi identity/pairing/session states.</p>
+    <table>
+      <thead><tr><th>New message</th><th>Legal state</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>PAIR_BEGIN</code></td><td>Pairing TLS only</td><td>Attempt ID and bounded display metadata.</td></tr>
+        <tr><td><code>PAIR_COMMIT</code></td><td>Pairing TLS only</td><td>Role-specific nonce commitment.</td></tr>
+        <tr><td><code>PAIR_REVEAL</code></td><td>After both commits</td><td>Nonce reveal and verification.</td></tr>
+        <tr><td><code>PAIR_CONFIRM</code></td><td>After SAS display</td><td>Local confirmation bound to attempt/transcript.</td></tr>
+        <tr><td><code>PAIR_COMMIT_RESULT</code></td><td>After dual confirmation</td><td>Atomic trust-record completion.</td></tr>
+        <tr><td><code>AUTHENTICATED_HELLO</code></td><td>Strict mTLS only</td><td>Version/features and identity-to-record binding.</td></tr>
+        <tr><td><code>START_STREAM</code></td><td>Authenticated idle</td><td>Explicit camera activation/configuration.</td></tr>
+        <tr><td><code>BUSY</code></td><td>Authenticated connection</td><td>Single-controller rejection without peer disclosure.</td></tr>
+      </tbody>
+    </table>
+    <h3>11.1 Protocol invariants</h3>
+    <ul>
+      <li>Pairing messages are rejected on normal listeners; camera messages are rejected before strict auth and START.</li>
+      <li>Unknown required messages, invalid transitions, wrong roles, repeated commits/reveals and cross-attempt IDs terminate the connection.</li>
+      <li>Every new message has canonical encoding and shared Kotlin/C++ valid/malformed fixtures.</li>
+      <li>Pairing metadata, TLS handshake and normal session have separate size/time limits.</li>
+      <li>Fuzz the plaintext parser/state machine after TLS termination.</li>
+    </ul>
+  </section>
+
+  <section id="recovery">
+    <h2>12. Recovery, performance and latency</h2>
+    <h3>12.1 Reconnect</h3>
+    <ul>
+      <li>On socket loss, stop writes, show disconnect slate and rediscover the same identity for at most 60 seconds.</li>
+      <li>Require exact pinned SPKI on every reconnect; names and IP addresses never replace identity.</li>
+      <li>Fresh TLS and protocol handshakes, reconfigure encoder, request keyframe.</li>
+      <li>Bounded latest-biased encoded queue; no buffering an outage.</li>
+      <li>Manual host fallback remains strict-pin authenticated.</li>
+    </ul>
+    <h3>12.2 Baseline and targets</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Requirement</th></tr></thead>
+      <tbody>
+        <tr><td>Existing ADB glass-to-OBS latency</td><td>Measure in Phase 0 with LED/high-frame-rate external capture before refactor.</td></tr>
+        <tr><td>Wi-Fi latency</td><td>Set acceptance relative to measured ADB baseline; report median and p95, not a single anecdotal value.</td></tr>
+        <tr><td>Discovery</td><td>Median ≤2 s, p95 ≤5 s.</td></tr>
+        <tr><td>Start to decoded frame</td><td>Median ≤2 s, p95 ≤4 s.</td></tr>
+        <tr><td>Reconnect</td><td>≤10 s when same paired phone becomes reachable.</td></tr>
+        <tr><td>Default stream</td><td>1080p30 at 8 Mbps; 720p30 at 4 Mbps fallback.</td></tr>
+        <tr><td>Queue contribution</td><td>Target &lt;100 ms; instrument queue depth/drops.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="adb">
+    <h2>13. ADB migration and release removal</h2>
+    <div class="callout danger"><strong>Current risk:</strong> the existing exported-activity/abstract-socket ADB path is not an acceptable release transport because a local app may be able to select/connect a session socket without its own camera permission.</div>
+    <ol>
+      <li>Phase 1 extracts transport interfaces and keeps ADB only to prove behavioral parity.</li>
+      <li>Android ADB code moves to a development-only Gradle source set/flavor excluded from release APK compilation and manifest merging.</li>
+      <li>Desktop ADB code is controlled by <code>OPENLENS_ENABLE_ADB_TRANSPORT</code>, ON only for explicit developer builds and OFF for release/package presets.</li>
+      <li>Normal GUI never exposes ADB after Wi-Fi passes Phase 5.</li>
+      <li>Release CI inspects APK manifest/classes and desktop dynamic dependencies/strings to prove no ADB launch/session provider is present.</li>
+      <li>Public documentation and runtime dependency checks do not mention or require Platform Tools.</li>
+      <li>Delete the fallback before beta unless a separate authenticated ADB design is approved.</li>
+    </ol>
+  </section>
+
+  <section id="phases">
+    <h2>14. Implementation phases</h2>
+    <div class="phase"><h3>Phase 0 — Evidence and ADRs</h3><ul><li>Measure current ADB glass-to-OBS median/p95 latency.</li><li>Prove Android NSD ↔ Avahi on reference LAN.</li><li>Prove Android Keystore EC certificate as TLS 1.3 server/client identity.</li><li>Prove camera-only FGS sustains backgrounded Wi-Fi streaming; reject/add connectedDevice via ADR.</li><li>Implement v2 commit–reveal SAS spike and shared Kotlin/C++ test vectors.</li><li>Test a certificate-grinding MITM harness against v1 and v2.</li><li>Measure TLS throughput ≥25 Mbps for 15 minutes.</li><li>Evaluate omitting stable UUID from TXT.</li></ul><p><strong>Exit:</strong> reviewed ADR set; Phase 2 remains blocked until external crypto approval.</p></div>
+    <div class="phase"><h3>Phase 1 — Transport-neutral refactor</h3><ul><li>Extract transport/discovery/session interfaces.</li><li>Adapt current ADB path without changing media behavior.</li><li>Add compile-time dev-only ADB gates on Android and desktop.</li><li>Retain all existing tests/live USB evidence.</li></ul><p><strong>Exit:</strong> no production behavior change; release configurations already exclude ADB.</p></div>
+    <div class="phase"><h3>Phase 2 — Identity, TLS and pairing</h3><ul><li>Implement identity stores and strict SPKI pinning.</li><li>Implement isolated pairing contexts and v2 symmetric commitments.</li><li>Implement dual confirmation, revocation, attempt limits and atomic storage.</li><li>Run shared vectors, grinding relay, replay and state-machine tests.</li></ul><p><strong>Entry gate:</strong> independent approval of §6 and test vectors. <strong>Exit:</strong> paired strict mTLS loopback/two-process connections; no camera.</p></div>
+    <div class="phase"><h3>Phase 3 — Android host and UI</h3><ul><li>NSD registration/TLS accept loop and rate limits.</li><li>Compose pairing/readiness/device-management UI.</li><li>Camera-only FGS integration and permissions.</li><li>Rotation, background and Android 16 restriction-mode tests.</li></ul><p><strong>Exit:</strong> real S24 advertises, pairs, revokes and reconnects without Camera2 failures.</p></div>
+    <div class="phase"><h3>Phase 4 — Linux discovery and pairing UI</h3><ul><li>Avahi discovery/resolution with scope preservation.</li><li>Qt pairing, paired selection, forget, diagnostics and manual pinned address.</li><li>CLI Wi-Fi devices/pair/forget JSON.</li><li>Graceful missing Avahi daemon behavior.</li></ul><p><strong>Exit:</strong> clean pairing and subsequent recognition without ADB installed.</p></div>
+    <div class="phase"><h3>Phase 5 — Camera over Wi-Fi</h3><ul><li>Protocol v2 authenticated hello/start/media loop.</li><li>Camera/encoder foreground lifecycle and single controller.</li><li>Desktop preview, V4L2 and native OBS.</li><li>Stop/error/stats/keyframe and bounded queue behavior.</li></ul><p><strong>Exit:</strong> target end-to-end journey passes with Platform Tools absent.</p></div>
+    <div class="phase"><h3>Phase 6 — Recovery, controls and performance</h3><ul><li>Strict-pin rediscovery/reconnect.</li><li>Safe live desktop controls.</li><li>Latency comparison to Phase 0 baseline.</li><li>1080p30/720p30 bandwidth, jitter, drops and thermal tuning.</li></ul><p><strong>Exit:</strong> physical reconnect/performance gates pass.</p></div>
+    <div class="phase"><h3>Phase 7 — Packaging and hardening</h3><ul><li>Wi-Fi-only release presets/artifacts; verify no ADB code.</li><li>Refresh dependencies, SPDX/SBOM, licenses and docs.</li><li>Security review, fuzzing, soaks, traffic capture and clean-machine install.</li><li>Android 17 permission readiness.</li></ul><p><strong>Exit:</strong> beta candidate only after every mandatory gate has retained evidence.</p></div>
+  </section>
+
+  <section id="tests">
+    <h2>15. Tests and release gates</h2>
+    <h3>15.1 Automated security tests</h3>
+    <ul class="check">
+      <li>Kotlin/C++ identity, SPKI and SAS shared vectors.</li>
+      <li>Both commitments required before either reveal.</li>
+      <li>Wrong nonce, role, key order, attempt ID or transcript rejected.</li>
+      <li>v1 certificate-grinding relay succeeds in harness; v2 remains limited to online SAS guessing.</li>
+      <li>One-sided confirmation never persists trust.</li>
+      <li>Pairing TLS policy unavailable outside visible pairing window.</li>
+      <li>Strict pin success, mismatch, changed key and constant-time comparison tests.</li>
+      <li>Replay/cross-attempt messages rejected.</li>
+      <li>Handshake/concurrency/rate limits enforced.</li>
+      <li>Release build contains no ADB provider or exported ADB entry point.</li>
+    </ul>
+    <h3>15.2 Functional/physical gates</h3>
+    <ul class="check">
+      <li>First matching-code pair succeeds; mismatch/cancel leaves no record.</li>
+      <li>Later use discovers/authenticates without code.</li>
+      <li>Unpaired LAN client cannot start/control/view camera.</li>
+      <li>Changed key requires explicit re-pair.</li>
+      <li>Normal app works on a clean host with no ADB installed.</li>
+      <li>Ten rotations preserve session.</li>
+      <li>Fifty Start/Stop cycles release every resource.</li>
+      <li>Twenty Wi-Fi disruptions recover within target when reachable.</li>
+      <li>60-minute 1080p30 and two-hour OBS soaks retain metrics/recording.</li>
+      <li>Traffic capture shows encrypted local-only OpenLens traffic and no internet endpoints.</li>
+      <li>Router isolation, missing Avahi and permission denial produce useful errors.</li>
+      <li>Manual address path remains strict-pin protected.</li>
+    </ul>
+    <h3>15.3 Crypto review deliverables</h3>
+    <ol>
+      <li>Formal transcript definition with byte lengths/endianness.</li>
+      <li>At least ten canonical test vectors including leading-zero SAS.</li>
+      <li>MITM/grinding/replay analysis.</li>
+      <li>Independent reviewer approval or concrete replacement with a published pairing protocol.</li>
+      <li>No implementation beyond experimental Phase 0 until approved.</li>
+    </ol>
+  </section>
+
+  <section id="risks">
+    <h2>16. Risks and mitigations</h2>
+    <table>
+      <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Bespoke SAS error</td><td>Symmetric commitments, exact test vectors, grinding harness and external review; replace with reviewed PAKE/SAS if rejected.</td></tr>
+        <tr><td>Pairing trust leakage</td><td>Separate SSL contexts/classes/listeners and capability-scoped lifetime.</td></tr>
+        <tr><td>mDNS blocked</td><td>Diagnostics plus strict-pinned manual address fallback.</td></tr>
+        <tr><td>LAN tracking</td><td>Foreground-only advertising, generic name and Phase 0 stable-ID omission study.</td></tr>
+        <tr><td>FGS restrictions</td><td>Camera-only physical spike; no speculative extra type/permission.</td></tr>
+        <tr><td>Wi-Fi jitter</td><td>Bounded latest-biased queues, keyframes, stats and baseline-relative latency gates.</td></tr>
+        <tr><td>Identity expiry/reset</td><td>SPKI trust independent of NotAfter; explicit changed-identity and re-pair flow.</td></tr>
+        <tr><td>TLS DoS</td><td>Half-open, concurrent, rate and timeout caps before expensive/application work.</td></tr>
+        <tr><td>Android 17 permission change</td><td>Versioned adapter, Android 16 restriction-mode tests and system-picker evaluation.</td></tr>
+        <tr><td>ADB divergence/vulnerability</td><td>Compile out now for release; delete before beta.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="files">
+    <h2>17. Expected repository changes</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Expected change</th></tr></thead>
+      <tbody>
+        <tr><td>Android Gradle/source sets</td><td>Production Wi-Fi code; separate dev-ADB source set/flavor excluded from release.</td></tr>
+        <tr><td>Android manifest</td><td><code>INTERNET</code>, camera FGS only, NSD/lifecycle declarations; no release ADB exported entry.</td></tr>
+        <tr><td><code>android/app/.../network</code></td><td>NSD, TLS, identity, pairing v2, pins, rate limits and transport.</td></tr>
+        <tr><td><code>MainActivity.kt</code></td><td>Wi-Fi/pairing/paired-device UI.</td></tr>
+        <tr><td><code>CameraStreamingService.kt</code></td><td>Transport-neutral camera FGS/session runner.</td></tr>
+        <tr><td><code>android/protocol</code></td><td>Protocol v2 pairing/auth/start/busy messages and shared vectors.</td></tr>
+        <tr><td><code>desktop/core</code></td><td>Avahi discovery, OpenSSL identity/TLS, v2 pairing, pin store and refactored session.</td></tr>
+        <tr><td><code>desktop/gui</code></td><td>Wi-Fi readiness, pairing, forget, manual fallback and diagnostics.</td></tr>
+        <tr><td><code>desktop/cli</code></td><td>Wi-Fi commands; dev-only ADB flags.</td></tr>
+        <tr><td><code>desktop/obs</code></td><td>Paired-device Wi-Fi session provider.</td></tr>
+        <tr><td><code>protocol</code></td><td>v2 canonical transcript, threat model, vectors and changelog.</td></tr>
+        <tr><td>CMake/presets</td><td>OpenSSL/Avahi; release preset forces ADB OFF and verifies absence.</td></tr>
+        <tr><td>Docs/packaging</td><td>Pairing/privacy/network troubleshooting, updated SBOM and no normal ADB dependency.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="review">
+    <h2>18. Request for Claude's v2 review</h2>
+    <p>Please review this plan as a security and implementation gate, focusing on:</p>
+    <ol class="check">
+      <li>Does §6's symmetric commitment protocol actually remove the certificate-grinding attack?</li>
+      <li>Are both commitments fixed before either reveal on every legal state-machine path?</li>
+      <li>Are roles, actual TLS SPKI values, attempt ID and confirmations bound correctly?</li>
+      <li>Is the six-digit online-guessing risk acceptably bounded by the attempt policy?</li>
+      <li>Should the plan use an existing reviewed SAS/PAKE library instead of implementing §6?</li>
+      <li>Is SPKI pinning independent of X.509 expiry correctly defined?</li>
+      <li>Is camera-only FGS the right default and is the Phase 0 proof sufficient?</li>
+      <li>Are release ADB exclusion gates strong enough to eliminate the current risk?</li>
+      <li>Does manual address fallback preserve authentication?</li>
+      <li>Are privacy and tracking tradeoffs in mDNS adequately handled?</li>
+      <li>Are DoS limits and test gates sufficient?</li>
+      <li>Mark every phase approve/revise/block and identify any remaining critical issue.</li>
+    </ol>
+    <h3>Requested output</h3>
+    <ol>
+      <li>Critical findings first with section references and attack traces.</li>
+      <li>Concrete replacement language for rejected mechanisms.</li>
+      <li>Phase dispositions.</li>
+      <li>Explicit verdict on whether Phase 0 and Phase 1 may begin, and whether Phase 2 remains blocked.</li>
+    </ol>
+    <div class="callout warning"><strong>Implementation rule:</strong> Phase 0 and transport-neutral Phase 1 may proceed. Production pairing work in Phase 2 may not begin until this v2 protocol receives independent approval.</div>
+    <p class="small">End of OpenLens Wi-Fi Migration Plan v2.</p>
+  </section>
+</main>
+</body>
+</html>

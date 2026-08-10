@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OpenLens
+GenericName=Android Camera for OBS
+Comment=Use your Android phone as a private Wi-Fi camera in OBS
+Exec=openlens-desktop
+Icon=openlens
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=Camera;Android;OBS;WiFi;Webcam;
+StartupNotify=true

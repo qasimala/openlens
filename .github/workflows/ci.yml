@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - working-directory: android
+        run: ./gradlew --no-daemon :protocol:testDebugUnitTest :camera:testDebugUnitTest :app:assembleDebug :app:lintDebug
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y cmake ninja-build g++ pkg-config libavcodec-dev libavutil-dev libswscale-dev libobs-dev qt6-base-dev
+      - run: clang-format --dry-run --Werror $(find desktop -type f \( -name '*.cpp' -o -name '*.hpp' \))
+      - run: cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Debug -DOPENLENS_BUILD_TESTS=ON
+      - run: cmake --build build/ci
+      - run: ctest --test-dir build/ci --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y cmake ninja-build g++ pkg-config libavcodec-dev libavutil-dev libswscale-dev
+      - run: cmake -S . -B build/asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DOPENLENS_ENABLE_SANITIZERS=ON -DOPENLENS_BUILD_OBS_PLUGIN=OFF -DOPENLENS_BUILD_DESKTOP_GUI=OFF
+      - run: cmake --build build/asan
+      - run: ctest --test-dir build/asan --output-on-failure
+
+  fuzz-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y cmake ninja-build clang pkg-config libavcodec-dev libavutil-dev libswscale-dev
+      - run: cmake -S . -B build/fuzz -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DOPENLENS_BUILD_FUZZERS=ON -DOPENLENS_BUILD_OBS_PLUGIN=OFF -DOPENLENS_BUILD_DESKTOP_GUI=OFF
+      - run: cmake --build build/fuzz --target protocol_fuzzer
+      - run: build/fuzz/protocol_fuzzer -runs=10000 protocol/fixtures/valid protocol/fixtures/malformed

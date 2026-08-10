@@ -1,0 +1,10 @@
+.gradle/
+.idea/
+**/.gradle/
+**/build/
+/build/
+**/local.properties
+*.iml
+*.h264
+*.mp4
+*.log

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "camera_id": "0",
+  "encoder": "c2.qti.avc.encoder",
+  "requested_width": 1920,
+  "requested_height": 1080,
+  "requested_fps": 30,
+  "requested_bitrate": 8000000,
+  "elapsed_seconds": 30.66824103,
+  "media_seconds": 29.673641,
+  "encoded_frames": 888,
+  "keyframes": 30,
+  "encoded_bytes": 25566906,
+  "derived_fps": 29.925549075693137,
+  "derived_bitrate_bps": 6892826,
+  "eos_seen": true,
+  "actual_format": "{max-bitrate=8000000, crop-right=1919, mime=video\/avc, profile=2, bitrate=8000000, priority=4, intra-refresh-period=0, color-standard=1, feature-secure-playback=0, csd-1=java.nio.HeapByteBuffer[pos=0 lim=8 cap=8], color-transfer=3, crop-bottom=1079, vendor.qti-ext-enc-content-adaptive-mode.value=0, prepend-sps-pps-to-idr-frames=0, crop-left=0, width=1920, bitrate-mode=2, color-range=2, crop-top=0, frame-rate=30, height=1080, csd-0=java.nio.HeapByteBuffer[pos=0 lim=22 cap=22]}",
+  "camera_surface_to_encoder_output_latency_ms": {
+    "samples": 888,
+    "min": 64.23375700378418,
+    "p50": 89.63681599426269,
+    "p95": 98.17379699707031,
+    "p99": 101.61983999633789,
+    "max": 122.73694900512696
+  },
+  "video_file": "phase0-1080p30.mp4"
+}

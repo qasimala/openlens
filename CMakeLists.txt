@@ -1,0 +1,50 @@
+cmake_minimum_required(VERSION 3.22)
+project(openlens VERSION 0.1.0 LANGUAGES C CXX)
+
+option(OPENLENS_BUILD_TESTS "Build OpenLens tests" ON)
+option(OPENLENS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(OPENLENS_BUILD_OBS_PLUGIN "Build the native OBS source when libobs is available" ON)
+option(OPENLENS_BUILD_DESKTOP_GUI "Build the Qt OpenLens Desktop application" ON)
+option(OPENLENS_BUILD_FUZZERS "Build libFuzzer protocol targets with Clang" OFF)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(OPENLENS_BUILD_TESTS)
+  enable_testing()
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror)
+  if(OPENLENS_ENABLE_SANITIZERS)
+    add_compile_options(-fno-omit-frame-pointer -fsanitize=address,undefined)
+    add_link_options(-fno-omit-frame-pointer -fsanitize=address,undefined)
+  endif()
+endif()
+
+add_subdirectory(desktop/core)
+add_subdirectory(desktop/cli)
+
+if(OPENLENS_BUILD_DESKTOP_GUI)
+  add_subdirectory(desktop/gui)
+endif()
+
+if(OPENLENS_BUILD_OBS_PLUGIN)
+  add_subdirectory(desktop/obs)
+endif()
+
+if(OPENLENS_BUILD_TESTS)
+  add_subdirectory(desktop/tests)
+endif()
+
+if(OPENLENS_BUILD_FUZZERS)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "OPENLENS_BUILD_FUZZERS requires Clang")
+  endif()
+  add_executable(protocol_fuzzer desktop/fuzz/protocol_fuzzer.cpp)
+  target_link_libraries(protocol_fuzzer PRIVATE openlens_core)
+  target_compile_options(protocol_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+  target_link_options(protocol_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()

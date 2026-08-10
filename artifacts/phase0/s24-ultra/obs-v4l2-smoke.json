@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "obs_version": "32.2.1",
+  "obs_source_id": "v4l2_input",
+  "device": "/dev/video42",
+  "card": "OpenLens",
+  "driver": "v4l2 loopback",
+  "width": 1920,
+  "height": 1080,
+  "pixel_format": "YU12",
+  "unique_frames": 243,
+  "media_seconds": 8.073093,
+  "measured_fps": 29.976,
+  "passed": true
+}

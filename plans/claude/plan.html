@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenLens — Phone-as-Camera: Project Plan</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1d2129;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #4fc3f7;
+    --accent-2: #81c784;
+    --warn: #ffb74d;
+    --border: #2a2f3a;
+    --code-bg: #12141a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fa; --panel: #ffffff; --panel-2: #f0f2f5;
+      --text: #1c2129; --muted: #5b6472; --accent: #0277bd;
+      --accent-2: #2e7d32; --warn: #b26a00; --border: #dde1e8; --code-bg: #eef0f4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2.2rem; margin: 0 0 .4rem; }
+  h1 .accent { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 1.05rem; margin: 0; }
+  h2 {
+    font-size: 1.45rem; margin: 2.8rem 0 1rem; padding-bottom: .4rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h2 .num { color: var(--accent); font-weight: 700; margin-right: .5rem; }
+  h3 { font-size: 1.1rem; margin: 1.6rem 0 .6rem; color: var(--accent); }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  code, pre {
+    font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    font-size: .88em;
+  }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: 4px; border: 1px solid var(--border); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95rem; }
+  th, td { border: 1px solid var(--border); padding: .55rem .8rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-2); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.2rem 1.4rem; margin: 1rem 0;
+  }
+  .card.goal { border-left: 4px solid var(--accent-2); }
+  .card.risk { border-left: 4px solid var(--warn); }
+  .pill {
+    display: inline-block; background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 999px; padding: .1rem .7rem; font-size: .8rem; margin: 0 .3rem .3rem 0;
+  }
+  .phase {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.3rem 1.5rem; margin: 1.2rem 0;
+  }
+  .phase h3 { margin-top: 0; }
+  .phase .meta { color: var(--muted); font-size: .85rem; margin-bottom: .8rem; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem; overflow-x: auto; font-family: ui-monospace, monospace;
+    font-size: .82rem; line-height: 1.45; white-space: pre;
+  }
+  ul.checks { list-style: none; padding-left: 0; }
+  ul.checks li { padding-left: 1.6rem; position: relative; }
+  ul.checks li::before { content: "☐"; position: absolute; left: .2rem; color: var(--accent); }
+  a { color: var(--accent); }
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.5rem; }
+  .toc ol { margin: .4rem 0; padding-left: 1.4rem; }
+  .toc a { text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1><span class="accent">OpenLens</span> — Use Your Phone as a Camera</h1>
+  <p class="subtitle">Open-source Android phone → PC camera pipeline, USB-first, OBS-ready.
+  Reference device: Samsung Galaxy S24 Ultra (USB debugging enabled). Host: Linux.</p>
+  <p style="margin-top:.6rem">
+    <span class="pill">Kotlin</span><span class="pill">CameraX / Camera2</span><span class="pill">MediaCodec H.264</span>
+    <span class="pill">ADB / localabstract socket</span><span class="pill">Rust or C desktop client</span>
+    <span class="pill">v4l2loopback</span><span class="pill">OBS</span><span class="pill">Open Source</span>
+  </p>
+</header>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#goals">Goals &amp; Non-Goals</a></li>
+    <li><a href="#landscape">Prior Art &amp; Why This Approach</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#protocol">Wire Protocol</a></li>
+    <li><a href="#android">Android App Design</a></li>
+    <li><a href="#desktop">Desktop Client Design</a></li>
+    <li><a href="#obs">OBS Integration</a></li>
+    <li><a href="#phases">Milestones &amp; Phases</a></li>
+    <li><a href="#repo">Repository Layout</a></li>
+    <li><a href="#risks">Risks &amp; Mitigations</a></li>
+    <li><a href="#licensing">Licensing &amp; Community</a></li>
+    <li><a href="#firststeps">Concrete First Steps</a></li>
+  </ol>
+</nav>
+
+<h2 id="goals"><span class="num">1.</span>Goals &amp; Non-Goals</h2>
+<div class="card goal">
+  <strong>MVP definition:</strong> Plug in the S24 Ultra over USB with debugging enabled, run one desktop
+  command, and the phone's rear camera appears as a video source in OBS at 1080p/30fps with &lt; 150 ms latency.
+</div>
+<h3>Goals</h3>
+<ul>
+  <li><strong>USB-first (ADB transport):</strong> zero network setup, reliable bandwidth, charges while streaming.</li>
+  <li><strong>Low latency:</strong> hardware H.264 encode on the phone, hardware decode on the PC; target &lt; 150 ms glass-to-glass.</li>
+  <li><strong>OBS as first-class consumer:</strong> via a virtual V4L2 camera on Linux (works in every app, not just OBS).</li>
+  <li><strong>High quality:</strong> up to 4K30 / 1080p60 depending on encoder limits; manual controls (lens selection, torch, focus, exposure) later.</li>
+  <li><strong>Fully open source</strong> — no accounts, no telemetry, no watermarks, no paywalled resolutions.</li>
+</ul>
+<h3>Non-Goals (for v1)</h3>
+<ul>
+  <li>iOS support (architecture shouldn't preclude it, but Android ships first).</li>
+  <li>Wi-Fi streaming (planned for v2 — the protocol will be transport-agnostic so this is additive).</li>
+  <li>Audio (v2; protocol reserves a channel for it).</li>
+  <li>Windows/macOS virtual cameras (v2 — the desktop client core will be cross-platform, only the virtual-camera sink is OS-specific).</li>
+</ul>
+
+<h2 id="landscape"><span class="num">2.</span>Prior Art &amp; Why This Approach</h2>
+<table>
+  <tr><th>Project</th><th>What it does</th><th>Takeaway for OpenLens</th></tr>
+  <tr>
+    <td><strong>scrcpy</strong> (Genymobile)</td>
+    <td>Mirrors screen (and since v2.0, cameras) over ADB using a server jar pushed via <code>adb push</code> + <code>app_process</code>, H.264 over a localabstract socket. Also has <code>--v4l2-sink</code>.</td>
+    <td>The gold-standard architecture for USB streaming. OpenLens differs by being a <em>real installable app</em> with a camera-centric UI (framing preview, lens/exposure controls, status), not a headless pushed server. Study its socket + codec handling closely.</td>
+  </tr>
+  <tr>
+    <td><strong>DroidCam / Iriun / Camo</strong></td>
+    <td>Phone-as-webcam apps, mostly proprietary, freemium (720p caps, watermarks).</td>
+    <td>Validates demand. The open-source, no-caps angle is the differentiator.</td>
+  </tr>
+  <tr>
+    <td><strong>Android 14 native webcam (UVC gadget)</strong></td>
+    <td>Android 14+ can present itself as a standard USB webcam ("Use phone as webcam" in USB settings). The S24 Ultra supports this.</td>
+    <td>Great baseline, but limited: no resolution/bitrate control, typically capped quality, no app-level controls. OpenLens targets higher quality + control. Document it in the README as the "no-install" alternative so users can compare.</td>
+  </tr>
+  <tr>
+    <td><strong>v4l2loopback</strong></td>
+    <td>Kernel module exposing a virtual <code>/dev/videoN</code> device.</td>
+    <td>The standard Linux virtual-camera sink; OBS (and browsers, Zoom, etc.) consume it natively. OBS's own Virtual Camera uses it too.</td>
+  </tr>
+</table>
+<p><strong>Chosen approach:</strong> installable Android app that runs a foreground service with an H.264
+encoder, streamed over an ADB-forwarded socket to a small desktop client that decodes and writes into
+v4l2loopback. This is the scrcpy transport model married to a proper camera app UX.</p>
+
+<h2 id="architecture"><span class="num">3.</span>Architecture</h2>
+<div class="diagram">
+┌──────────────────── Samsung S24 Ultra ────────────────────┐
+│                                                           │
+│  CameraX / Camera2 ──► Surface ──► MediaCodec (H.264 HW)  │
+│        │                                    │             │
+│  Preview UI (framing,                Encoded NAL units    │
+│  lens, torch, exposure)                     │             │
+│                              LocalServerSocket            │
+│                              "openlens" (abstract)        │
+└─────────────────────────────────┬─────────────────────────┘
+                                  │  USB cable
+              adb forward tcp:27183 localabstract:openlens
+                                  │
+┌──────────────────── Linux Desktop ───────────┴────────────┐
+│                                                           │
+│  openlens-cli (Rust)                                      │
+│    ├─ adb management (device detect, forward, app launch) │
+│    ├─ TCP client :27183 ──► demux ──► H.264 decoder       │
+│    │                                  (FFmpeg/libav,      │
+│    │                                   VAAPI when avail.) │
+│    └─ YUV420 frames ──► /dev/videoN (v4l2loopback)        │
+│                              │                            │
+│                              ▼                            │
+│                   OBS "Video Capture Device (V4L2)"       │
+│                   (also Zoom, Meet, Firefox, Chrome…)     │
+└───────────────────────────────────────────────────────────┘
+</div>
+<h3>Key decisions</h3>
+<table>
+  <tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr>
+  <tr><td>Transport</td><td>ADB port forward over USB (<code>localabstract</code> socket)</td><td>No pairing, no network config, no firewall issues; USB debugging is already enabled. Wi-Fi becomes a drop-in second transport later (same protocol over plain TCP).</td></tr>
+  <tr><td>Codec</td><td>H.264 (AVC) hardware via MediaCodec; HEVC/AV1 optional later</td><td>Universally hardware-supported on both ends; low-latency encoder settings well understood. S24 Ultra's Exynos/Snapdragon encoders easily do 4K30.</td></tr>
+  <tr><td>Socket direction</td><td>Phone listens (server), desktop connects</td><td>Matches <code>adb forward</code> semantics; the CLI can also start the app via <code>adb shell am start</code> so one command does everything.</td></tr>
+  <tr><td>Desktop language</td><td>Rust (alternative: C++)</td><td>Single static binary, easy FFI to FFmpeg and V4L2, cross-platform core for future Windows/macOS sinks. Crates: <code>ffmpeg-next</code> or raw <code>libavcodec</code> FFI, <code>v4l</code>, <code>adb_client</code> or shell-out to <code>adb</code>.</td></tr>
+  <tr><td>Virtual camera</td><td>v4l2loopback</td><td>Standard; OBS reads it directly. Ship a setup helper: <code>modprobe v4l2loopback exclusive_caps=1 card_label="OpenLens"</code>.</td></tr>
+  <tr><td>Pixel format into v4l2</td><td>YUV420 (I420) after decode</td><td>Broadest app compatibility with <code>exclusive_caps=1</code>.</td></tr>
+</table>
+
+<h2 id="protocol"><span class="num">4.</span>Wire Protocol (v1)</h2>
+<p>Two logical channels multiplexed on one TCP stream (or two forwards — decide during prototyping; start simple with two sockets: <em>video</em> and <em>control</em>).</p>
+<h3>Handshake</h3>
+<pre><code>[magic "OLNS"][u16 proto_version][u16 flags]
+[device info JSON: model, camera list (id, facing, physical lenses, max res/fps), codec caps]</code></pre>
+<h3>Video channel (phone → desktop)</h3>
+<pre><code>Per packet:
+[u64 pts_us][u32 size][u8 flags: KEYFRAME|CONFIG][payload: H.264 Annex-B NAL units]
+
+- First packet after (re)configure carries SPS/PPS (CONFIG flag).
+- Encoder settings: low-latency mode, repeat-SPS/PPS on keyframes,
+  keyframe interval ~2 s, CBR-ish bitrate (default 12 Mbps @1080p, 30 @4K).</code></pre>
+<h3>Control channel (desktop → phone, JSON lines)</h3>
+<pre><code>{"cmd":"start","camera":"0","width":1920,"height":1080,"fps":30,"bitrate":12000000}
+{"cmd":"switch_camera","camera":"2"}        // ultrawide / tele on S24U
+{"cmd":"set","torch":true}
+{"cmd":"set","zoom":2.0}
+{"cmd":"set","exposure_compensation":-1}
+{"cmd":"stop"}</code></pre>
+<p class="muted">Version every message set; the handshake's <code>proto_version</code> gates compatibility so app and CLI can ship independently.</p>
+
+<h2 id="android"><span class="num">5.</span>Android App Design</h2>
+<h3>Stack</h3>
+<ul>
+  <li><strong>Kotlin</strong>, minSdk 26 (Android 8) — MediaCodec surface-input and Camera2 are solid from here; realistically test 29+.</li>
+  <li><strong>CameraX</strong> for the happy path (preview + <code>VideoCapture</code>-style Surface pipeline); drop to <strong>Camera2</strong> interop for physical-lens selection (S24 Ultra exposes ultrawide / wide / 3x / 5x as physical cameras of a logical camera) and manual controls.</li>
+  <li><strong>Foreground service</strong> with <code>foregroundServiceType="camera"</code> — required on Android 14 for camera use while backgrounded; persistent notification with a Stop action.</li>
+  <li><strong>Jetpack Compose</strong> UI: live preview, big status indicator (Idle / Waiting for PC / Streaming), resolution+fps picker, lens switcher, torch toggle.</li>
+</ul>
+<h3>Pipeline detail</h3>
+<ol>
+  <li>Open camera → bind two outputs: preview <code>SurfaceView</code> + encoder input Surface from <code>MediaCodec.createInputSurface()</code>.</li>
+  <li>Configure MediaCodec: <code>video/avc</code>, requested size, <code>BITRATE_MODE_CBR</code>, <code>KEY_LATENCY=0</code> / low-latency flag where supported, <code>KEY_REPEAT_PREVIOUS_FRAME_AFTER</code> to keep the stream alive on static scenes.</li>
+  <li>Drain encoder on a dedicated thread → frame packets onto the <code>LocalServerSocket</code>.</li>
+  <li>Control listener thread applies commands via <code>CameraControl</code>/<code>CaptureRequest</code>; a resolution change tears down and rebuilds the codec (send CONFIG packet again).</li>
+</ol>
+<h3>Android gotchas to plan for</h3>
+<ul>
+  <li><strong>Rotation:</strong> send display/sensor orientation in the handshake and on change; desktop rotates (or negotiate fixed landscape for v1).</li>
+  <li><strong>Thermals:</strong> S24 Ultra will throttle on long 4K sessions — surface thermal status (<code>PowerManager.getThermalHeadroom</code>) in the UI and auto-step-down bitrate.</li>
+  <li><strong>Samsung quirk:</strong> some Samsung devices hide physical lens IDs from third-party apps; verify what <code>CameraManager</code> exposes on the S24U early (Phase 0 spike).</li>
+  <li><strong>Battery optimization:</strong> USB power mostly solves it, but exempt the service from doze prompts anyway.</li>
+</ul>
+
+<h2 id="desktop"><span class="num">6.</span>Desktop Client Design (<code>openlens-cli</code>)</h2>
+<pre><code>$ openlens                # detect device, adb forward, launch app activity/service,
+                          # connect, decode, create/attach v4l2 device, stream
+$ openlens --list-cameras # query device camera capabilities
+$ openlens --res 4k --fps 30 --camera tele
+$ openlens --setup        # install/load v4l2loopback with the right options (guided)</code></pre>
+<ul>
+  <li><strong>ADB handling:</strong> shell out to the system <code>adb</code> binary (simplest, most robust) — detect device, <code>adb forward tcp:27183 localabstract:openlens</code>, <code>adb shell am start-foreground-service …</code>. Nice error messages for "no device", "unauthorized", "multiple devices".</li>
+  <li><strong>Decode:</strong> libavcodec; try VAAPI hw decode, fall back to software (1080p30 software decode is trivial on any desktop CPU).</li>
+  <li><strong>v4l2 sink:</strong> open <code>/dev/videoN</code>, set format (I420, WxH, fps), write frames. Auto-detect an existing v4l2loopback device labeled "OpenLens"; offer <code>--setup</code> to create it (needs sudo — print the exact commands instead of silently escalating).</li>
+  <li><strong>Resilience:</strong> auto-reconnect on cable blips; hold last frame or show a "reconnecting" slate in the virtual cam so OBS doesn't lose the source.</li>
+  <li><strong>Stats:</strong> <code>--stats</code> overlay to stderr: fps, bitrate, decode latency, dropped frames.</li>
+</ul>
+
+<h2 id="obs"><span class="num">7.</span>OBS Integration</h2>
+<ul>
+  <li><strong>v1:</strong> OBS → Sources → <em>Video Capture Device (V4L2)</em> → select "OpenLens". Zero OBS-side code. Document with screenshots.</li>
+  <li><strong>v2 (optional):</strong> native OBS plugin (<code>obs-openlens</code>) that connects to the phone directly and hands decoded frames to OBS — skips the loopback device, enables per-source settings UI inside OBS, and is the natural path to Windows/macOS support.</li>
+</ul>
+
+<h2 id="phases"><span class="num">8.</span>Milestones &amp; Phases</h2>
+
+<div class="phase">
+  <h3>Phase 0 — Spike &amp; validation (weekend)</h3>
+  <div class="meta">Goal: de-risk the unknowns on real hardware before writing product code.</div>
+  <ul class="checks">
+    <li>Enumerate S24 Ultra cameras via a scratch app: logical/physical IDs, max resolutions, fps ranges.</li>
+    <li>Prove pipeline: CameraX → MediaCodec surface → dump H.264 to a file → play with ffplay.</li>
+    <li>Prove transport: LocalServerSocket + <code>adb forward</code> → pipe raw H.264 → <code>ffplay -f h264 -i tcp://…</code> and eyeball latency.</li>
+    <li>Prove sink: <code>ffmpeg → v4l2loopback → OBS</code> manually.</li>
+    <li>Baseline comparison: try Android 14 native webcam mode + scrcpy <code>--video-source=camera --v4l2-sink</code>; record quality/latency numbers to beat.</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <h3>Phase 1 — MVP (2–4 weeks)</h3>
+  <div class="meta">Goal: the one-command experience, rear wide camera, 1080p30.</div>
+  <ul class="checks">
+    <li>Android app: preview UI, foreground service, encoder, video socket, handshake.</li>
+    <li><code>openlens-cli</code>: adb orchestration, decode, v4l2 write, reconnect.</li>
+    <li>Protocol v1 frozen (video channel + start/stop control).</li>
+    <li>README with setup guide (udev/adb, v4l2loopback, OBS screenshots).</li>
+    <li>Tag v0.1.0; APK via GitHub Releases + CI (GitHub Actions: gradle build, cargo build, clippy, ktlint).</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <h3>Phase 2 — Camera controls &amp; quality (2–3 weeks)</h3>
+  <ul class="checks">
+    <li>Lens switching (ultrawide/wide/3x/5x), zoom, torch, exposure compensation, tap-to-focus — from both phone UI and CLI flags.</li>
+    <li>1080p60 and 4K30 modes; adaptive bitrate on thermal throttle.</li>
+    <li>Rotation handling; portrait/landscape negotiation.</li>
+    <li>Latency tuning pass with measured numbers (flash-to-photon test) published in docs.</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <h3>Phase 3 — Reach (3–4 weeks)</h3>
+  <ul class="checks">
+    <li>Wi-Fi transport (mDNS discovery + QR pairing; same protocol over TLS-wrapped TCP).</li>
+    <li>Audio channel (phone mic → Opus → PipeWire virtual source on Linux).</li>
+    <li>F-Droid submission (reproducible build, no proprietary deps — mind this from day one).</li>
+    <li>Optional: native OBS plugin; Windows/macOS virtual camera sinks.</li>
+  </ul>
+</div>
+
+<h2 id="repo"><span class="num">9.</span>Repository Layout (monorepo)</h2>
+<pre><code>openlens/
+├── android/                 # Gradle project (Kotlin, Compose, CameraX)
+│   └── app/src/main/…       # ui/, service/, camera/, codec/, net/
+├── desktop/                 # Rust workspace
+│   ├── openlens-core/       # protocol, demux, decode (platform-agnostic)
+│   ├── openlens-cli/        # Linux CLI + v4l2 sink
+│   └── openlens-obs/        # (later) OBS plugin
+├── protocol/PROTOCOL.md     # wire format spec, versioned
+├── docs/                    # setup guides, OBS screenshots, latency methodology
+├── plans/claude/plan.html   # this document
+├── .github/workflows/       # android.yml, desktop.yml, release.yml
+├── LICENSE
+└── README.md</code></pre>
+
+<h2 id="risks"><span class="num">10.</span>Risks &amp; Mitigations</h2>
+<div class="card risk"><strong>ADB dependency UX:</strong> non-dev users won't have USB debugging on. Acceptable for the v1 audience (streamers/tinkerers); document enabling it with screenshots, and keep Wi-Fi mode on the roadmap as the mainstream path.</div>
+<div class="card risk"><strong>Samsung hides physical lenses:</strong> if only the logical camera is exposed to third-party apps, ship with logical-camera zoom (which Samsung maps across lenses internally) — Phase 0 spike answers this.</div>
+<div class="card risk"><strong>v4l2loopback friction:</strong> needs a kernel module (DKMS). Mitigate with <code>--setup</code> guidance, distro-specific docs, and clear detection of "module loaded but wrong options".</div>
+<div class="card risk"><strong>Latency creep:</strong> buffering can hide in the encoder, socket, decoder, and v4l2 consumer. Measure at every phase (timestamp overlay + high-fps capture of both screens); never merge a change that regresses the glass-to-glass number.</div>
+<div class="card risk"><strong>Competing with "good enough" (native Android 14 webcam):</strong> the pitch must stay sharp — higher resolutions, bitrate control, lens selection, OBS-oriented features, and open source. Keep a comparison table in the README honest and current.</div>
+
+<h2 id="licensing"><span class="num">11.</span>Licensing &amp; Community</h2>
+<ul>
+  <li><strong>License:</strong> Apache-2.0 (permissive, patent grant, F-Droid compatible). If you study scrcpy's source closely, note it's Apache-2.0 too — compatible. GPL-3.0 is the alternative if you want copyleft; decide before first release.</li>
+  <li><strong>FFmpeg linkage:</strong> dynamic-link LGPL builds of libavcodec to keep the Apache story clean; H.264 <em>decoding</em> via system FFmpeg sidesteps shipping codec code.</li>
+  <li>CONTRIBUTING.md, issue templates (device-report template is gold for a hardware-diverse project), CI on every PR, tagged releases with prebuilt CLI binaries + APK.</li>
+</ul>
+
+<h2 id="firststeps"><span class="num">12.</span>Concrete First Steps (this week)</h2>
+<ol>
+  <li><code>git init</code> structure above; commit this plan.</li>
+  <li>Phase 0 spike app: list S24 Ultra camera capabilities (<code>CameraManager.getCameraIdList</code> + characteristics dump) — answers the lens-exposure question immediately.</li>
+  <li>Wire the throwaway pipeline: CameraX → MediaCodec → LocalServerSocket → <code>adb forward</code> → <code>ffplay</code>. Seeing live low-latency video on the desktop is the whole project de-risked.</li>
+  <li>Manual v4l2loopback + ffmpeg → OBS test to lock in the sink parameters (<code>exclusive_caps=1</code>, I420).</li>
+  <li>Freeze protocol v1 draft in <code>protocol/PROTOCOL.md</code>; then start the real Android app + Rust CLI in parallel.</li>
+</ol>
+
+<p class="muted" style="margin-top:3rem;border-top:1px solid var(--border);padding-top:1rem">
+OpenLens project plan · drafted 2026-08-08 · target device: Galaxy S24 Ultra · host: Linux (CachyOS)</p>
+
+</div>
+</body>
+</html>

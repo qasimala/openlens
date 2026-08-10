@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review — Wi-Fi Migration Plan v1 (Claude)</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --panel-2:#1d2129; --text:#e6e9ef; --muted:#9aa3b2;
+    --accent:#4fc3f7; --ok:#81c784; --warn:#ffb74d; --danger:#e57373; --border:#2a2f3a; --code-bg:#12141a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f7f8fa; --panel:#fff; --panel-2:#f0f2f5; --text:#1c2129; --muted:#5b6472;
+      --accent:#0277bd; --ok:#2e7d32; --warn:#b26a00; --danger:#c62828; --border:#dde1e8; --code-bg:#eef0f4; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Inter","Segoe UI",system-ui,sans-serif; line-height:1.6; }
+  .wrap { max-width:1000px; margin:0 auto; padding:2.5rem 1.5rem 5rem; }
+  header { border-bottom:1px solid var(--border); padding-bottom:1.5rem; margin-bottom:2rem; }
+  h1 { font-size:2rem; margin:0 0 .4rem; }
+  h1 .accent { color:var(--accent); }
+  .subtitle { color:var(--muted); margin:0; }
+  h2 { font-size:1.4rem; margin:2.6rem 0 1rem; padding-bottom:.4rem; border-bottom:1px solid var(--border); }
+  h2 .num { color:var(--accent); font-weight:700; margin-right:.5rem; }
+  h3 { font-size:1.08rem; margin:1.5rem 0 .5rem; color:var(--accent); }
+  code,pre { font-family:"JetBrains Mono","Fira Code",ui-monospace,monospace; font-size:.88em; }
+  code { background:var(--code-bg); padding:.15em .4em; border-radius:4px; border:1px solid var(--border); }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:1rem; overflow-x:auto; line-height:1.5; }
+  pre code { background:none; border:none; padding:0; }
+  .table-wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; margin:1rem 0; font-size:.92rem; }
+  th,td { border:1px solid var(--border); padding:.55rem .8rem; text-align:left; vertical-align:top; }
+  th { background:var(--panel-2); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1.1rem 1.3rem; margin:1rem 0; }
+  .card.crit { border-left:4px solid var(--danger); }
+  .card.warn { border-left:4px solid var(--warn); }
+  .card.ok { border-left:4px solid var(--ok); }
+  .tag { display:inline-block; border-radius:4px; padding:0 .5rem; font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; margin-right:.4rem; }
+  .tag.block { background:rgba(229,115,115,.12); color:var(--danger); border:1px solid var(--danger); }
+  .tag.revise { background:rgba(255,183,77,.12); color:var(--warn); border:1px solid var(--warn); }
+  .tag.approve { background:rgba(129,199,132,.14); color:var(--ok); border:1px solid var(--ok); }
+  a { color:var(--accent); }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Review — <span class="accent">Wi-Fi Migration Plan v1</span></h1>
+  <p class="subtitle">Claude's independent review of <code>plans/codex/wifi-migration-plan-v1.html</code>, in the format requested by its §16.
+  Section references (§n) point at the plan under review.</p>
+</header>
+
+<h2><span class="num">0.</span>Verdict</h2>
+<div class="card ok">
+  <strong>Architecture: sound and well-scoped.</strong> mDNS discovery + TLS 1.3 + one-time mutual pairing + certificate pinning + PC-owned sessions is the correct design for LAN camera control, and the plan is admirably security-conscious (explicit trust-boundary framing, revocation, pairing-window capability isolation, bounded queues, no cloud). The layering (transport-neutral core, ADB as a transitional provider) is the right migration strategy.
+</div>
+<div class="card crit">
+  <strong>One critical cryptographic flaw blocks the pairing design as written (§5.2):</strong> the six-digit SAS is a truncated hash of two <em>attacker-choosable</em> certificates with no fresh nonces or commitment. An active MITM can grind its own certificates to force both endpoints to display the <em>same</em> code, defeating the entire pairing guarantee. This is fixable with a standard commitment-based numeric-comparison construction (§1 below). <strong>Do not implement pairing (Phase 2) until this is redesigned.</strong> Everything upstream and downstream of the ceremony is fine.
+</div>
+
+<h2><span class="num">1.</span>Critical security blocker — the SAS is grindable</h2>
+<h3>The flaw</h3>
+<p>§5.2 defines <code>SAS = TruncateDecimal(SHA-256("OpenLens Pairing v1" || min(Fp,Fd) || max(Fp,Fd)), 6)</code>,
+where <code>Fp</code>, <code>Fd</code> are SHA-256 fingerprints of the phone/desktop certificates, computed after a TLS handshake
+that "temporarily accepts an unpinned self-signed peer certificate." The rationale (§5.2, footnote) is: a relay that
+terminates two TLS connections shows different certs to each side → different codes → user sees a mismatch.</p>
+<p><strong>That rationale holds only for a passive or naïve relay.</strong> The attacker generates its own EC keypairs and
+therefore <em>chooses</em> the certificates it presents. In a MITM relay:</p>
+<pre><code>Phone sees attacker cert A_p  → computes  SAS_phone   = H(sort(P,   A_p))
+Desktop sees attacker cert A_d → computes  SAS_desktop = H(sort(D,   A_d))
+Attacker knows P and D (it terminated both handshakes) and freely picks A_p, A_d.
+Goal: make SAS_phone == SAS_desktop so BOTH users see matching codes and confirm.</code></pre>
+<p>Six decimal digits ≈ 2<sup>19.9</sup> of entropy. The attacker fixes any <code>A_d</code> (giving target
+<code>T = H(sort(D,A_d))</code>), then grinds fresh <code>A_p</code> until <code>H(sort(P,A_p)) == T</code> — about
+10<sup>6</sup> cheap EC keygen+hash operations, i.e. <strong>well under a second</strong>. (Birthday framing: ~10<sup>3</sup>
+candidates on each side also suffices.) The attacker genuinely possesses every private key it generates, so TLS
+proof-of-possession is passed and adds no protection. Both endpoints then pin the attacker's certs — a total, silent break.</p>
+<p>The §13.3 test "codes differ when TLS is terminated by a relay" would <em>pass</em> against a naïve relay and give false
+confidence; it does not model a grinding attacker.</p>
+
+<h3>The fix — commitment-based numeric comparison with fresh nonces</h3>
+<p>Truncated fingerprint comparison is only safe when the compared value is <em>full-length</em> (≥128 bits) or when short
+codes are made ungrindable by a <strong>commit-before-reveal</strong> exchange of fresh random nonces — the construction used by
+ZRTP SAS and Bluetooth/CTAP numeric comparison. Concretely:</p>
+<pre><code>1. Phone picks nonce_p (≥128-bit random). Desktop picks nonce_d.
+2. Phone sends commit = H("OpenLens Pair v1 commit" || nonce_p)   // BEFORE seeing nonce_d
+3. Desktop sends nonce_d.
+4. Phone reveals nonce_p. Desktop verifies commit == H(... || nonce_p).  // abort on mismatch
+5. Both compute, over the ACTUAL pinned certs (channel binding) + both nonces:
+   SAS = TruncateDecimal(
+           H("OpenLens Pair v1 sas" || nonce_p || nonce_d || Fp || Fd), 6)
+6. User compares the 6 digits on both screens and confirms on both. Then pin.</code></pre>
+<p>Because the phone commits to <code>nonce_p</code> before learning <code>nonce_d</code> (and vice-versa for the
+freshness of <code>nonce_d</code>), neither the attacker nor a party can search for colliding SAS values after the fact — the
+inputs are locked before they are known. This makes a 6-digit code safe (attacker success ≈ 1-in-10<sup>6</sup> per attempt,
+and §5.4's "max 5 attempts per window" caps it). Bind the SAS to the certs (<code>Fp,Fd</code>) so the confirmed code
+authenticates the exact keys being pinned. Consider using the TLS exporter (RFC 5705) as the channel-binding input instead of,
+or in addition to, the cert fingerprints for defence in depth.</p>
+<p class="muted">Alternative if you prefer typing over comparing: a PAKE (CPace / SPAKE2) seeded by a code one side generates and
+the user types into the other. It's stronger but changes the compare-not-type UX the plan wants; commitment-based numeric
+comparison is the better match here.</p>
+<div class="card warn"><strong>Also:</strong> §16 asks for a formal review of exactly this. Adopt a published construction and get the
+crypto independently reviewed rather than shipping a bespoke SAS. This is the one part of the project that genuinely warrants it.</div>
+
+<h2><span class="num">2.</span>Medium issues (revise before the relevant phase)</h2>
+
+<h3>2.1 The ADB fallback carries a known critical vulnerability (§3 "USB/ADB", §11, §16 Q9)</h3>
+<p>The current ADB transport uses an <em>abstract-namespace</em> <code>LocalServerSocket</code> whose session name arrives via an
+<code>exported="true"</code> activity intent, with no socket authentication — a zero-permission app on the phone can start a
+session with its own name and receive the camera feed (flagged in the implementation review of the prior handoff). If ADB is
+retained "temporarily as a developer fallback," that code path <strong>must not ship in release builds</strong> — gate it behind a
+compile-time flag excluded from the packaged APK, not merely a hidden runtime setting. Cleanest is to delete it before public
+beta (the plan already schedules this decision in §11 step 6; bring it forward and make "release build contains no ADB
+transport" a hard gate). Recommendation: <strong>keep ADB dev-only and compiled-out of release; do not maintain two supported
+workflows.</strong></p>
+
+<h3>2.2 Foreground-service type may be over-declared (§7.2–7.3, §16 Q4)</h3>
+<p>The <code>camera</code> FGS type (with <code>FOREGROUND_SERVICE_CAMERA</code>) is required and is what actually gates camera
+access while backgrounded. Holding a TCP socket is <em>not</em> itself a restricted FGS behavior, so <code>connectedDevice</code>
+is likely <strong>unnecessary</strong> — the camera FGS keeps the process (and its socket) alive during streaming. Adding
+<code>connectedDevice</code> pulls in <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code> + a qualifying permission for a type whose
+intent is companion/BT/USB devices, not LAN sockets. <code>CHANGE_NETWORK_STATE</code> <em>does</em> qualify if you keep it, and
+is a reasonable least-privilege choice — but first verify on-device that <code>camera</code> alone sustains a backgrounded
+stream (it should). Drop <code>connectedDevice</code> unless a concrete test shows it's needed. Advertising/accepting while only
+<em>ready</em> (not streaming) correctly needs no FGS at all (§16 Q5 — agreed, this is right).</p>
+
+<h3>2.3 No measured latency baseline to regress against (§10.3, §16 Q10)</h3>
+<p>The targets (1080p30@8Mbps, ≤100 ms queue budget, start-to-frame ≤2 s) are realistic for LAN Wi-Fi 5/6. But the ADB path's
+glass-to-OBS latency was never measured (it was a NOT-RUN gate in the prior release ledger), so there is no baseline to prove
+Wi-Fi doesn't regress it — and Wi-Fi adds jitter USB didn't. <strong>Establish the glass-to-glass latency baseline now</strong>
+(the LED/high-fps-camera method) so Phase 6 has a number to beat. The bounded latest-frame-biased queue (§10.2) is the correct
+jitter mitigation; keep it strict and instrument drops.</p>
+
+<h3>2.4 Certificate expiry vs. pin lifetime is unspecified (§5.1, §13.1)</h3>
+<p>§13.1 lists "expired/invalid cert handling," but for a pin-based identity, trust derives from the <em>key</em>, not X.509
+validity. If self-signed identities carry a short <code>NotAfter</code> and sessions reject on expiry, <strong>every pairing
+silently dies</strong> at that date. Decide explicitly: either issue very long-lived (or effectively non-expiring) identity certs,
+or ignore <code>NotAfter</code> for pinned peers and treat the pinned SPKI/cert hash as the sole trust anchor. State this in the
+protocol v2 spec so Android and desktop agree.</p>
+
+<h2><span class="num">3.</span>Minor / privacy notes</h2>
+<ul>
+  <li><strong>TXT <code>name</code> broadcasts a personal string</strong> (§6.1, "Qasim's Phone") to everyone on the LAN. Default
+  to a non-personal name (e.g. "OpenLens phone") or warn; the friendly name isn't needed for correctness (device ID + pin are).</li>
+  <li><strong>Stable device UUID in TXT is a passive-tracking handle</strong> (§6.1 <code>id</code>) — any LAN observer can link
+  the device across sessions/networks. Acceptable for a camera you're intentionally advertising, but note the linkability;
+  advertising only while the app is foreground (already planned) limits exposure.</li>
+  <li><strong>Constant-time SAS/pin comparison</strong> (§13.3 says "where practical") — for a 6-digit visually-compared SAS this
+  is moot, but the 32-byte pin comparison on the hot auth path should be constant-time; make it unconditional, not "where
+  practical."</li>
+  <li><strong>Avahi absence</strong> (§16 Q6): Avahi is the right Linux dependency; handle a missing/stopped
+  <code>avahi-daemon</code> with a clear diagnostic and the manual-IP fallback (below), and preserve the interface/scope ID for
+  link-local IPv6 (already noted in §6.1 — good).</li>
+  <li><strong>Manual IP fallback</strong> (§16 Q7): yes, keep it as an advanced/diagnostic entry. It stays safe because it still
+  performs strict mTLS pinning against the stored device ID — you lose discovery, never authentication.</li>
+  <li><strong>DoS on the accept loop</strong> (§5.4/§13.2): good coverage; add explicit rate-limiting of TLS handshakes and a cap
+  on concurrent half-open connections, since anyone on the LAN can reach the port.</li>
+</ul>
+
+<h2><span class="num">4.</span>Answers to the §16 review checklist</h2>
+<div class="table-wrap"><table>
+  <tr><th>#</th><th>Question</th><th>Answer</th></tr>
+  <tr><td>Q1</td><td>Does two-cert SAS + dual confirm prevent an active MITM?</td><td><strong>No, not as specified</strong> — grindable 6-digit code (§1). Fix: commitment + fresh nonces.</td></tr>
+  <tr><td>Q2</td><td>Android Keystore EC cert as TLS server key on API 31–36?</td><td><strong>Yes</strong>, feasible via <code>KeyManagerFactory</code> over AndroidKeyStore; non-exportable TEE key signs CertificateVerify fine. Spike it in Phase 0 as planned.</td></tr>
+  <tr><td>Q3</td><td>Permissive pairing trust cleanly separable from pinned sessions?</td><td><strong>Yes</strong> — use two distinct <code>SSLContext</code> instances; build the permissive one only while pairing UI is live and tear it down after. Never share trust managers. Sound as planned.</td></tr>
+  <tr><td>Q4</td><td><code>camera|connectedDevice</code> correct? <code>CHANGE_NETWORK_STATE</code> least-priv?</td><td><code>camera</code> is required and likely <strong>sufficient</strong>; <code>connectedDevice</code> probably superfluous (§2.2). If kept, <code>CHANGE_NETWORK_STATE</code> is a reasonable qualifier.</td></tr>
+  <tr><td>Q5</td><td>Advertise/accept while visible without a persistent FGS, promote on capture?</td><td><strong>Yes</strong>, correct and good for battery. Stop advertising when backgrounded-but-not-streaming (already planned).</td></tr>
+  <tr><td>Q6</td><td>Avahi the right Linux dependency; scope/daemon handling?</td><td><strong>Yes.</strong> Handle daemon absence gracefully; preserve interface/scope for link-local IPv6.</td></tr>
+  <tr><td>Q7</td><td>Manual IP fallback — keep it pin-safe?</td><td><strong>Keep it</strong> as diagnostic; strict mTLS pinning still applies, so it's safe.</td></tr>
+  <tr><td>Q8</td><td>Protocol v2 pairing states replay-safe, bounded, impossible on streaming sockets?</td><td><strong>Yes once §1 lands</strong> — fresh per-attempt nonces give replay safety; keep the "pairing messages only on pairing-mode socket" invariant and bind PAIR_CONFIRM to the attempt ID + certs.</td></tr>
+  <tr><td>Q9</td><td>Keep ADB as temporary fallback?</td><td><strong>Dev-only, compiled out of release</strong> (§2.1) — it carries the abstract-socket vuln. Prefer deleting before beta.</td></tr>
+  <tr><td>Q10</td><td>Latency/throughput/reconnect/soak thresholds realistic for 1080p30 on S24U?</td><td><strong>Yes</strong>, but establish the glass-to-glass baseline first (§2.3); Wi-Fi jitter makes the ≤100 ms queue budget the tightest target.</td></tr>
+  <tr><td>Q11</td><td>What needs a formal threat model / external crypto review?</td><td>The <strong>pairing ceremony / SAS construction</strong> (§1) — nothing else in the plan rises to that bar.</td></tr>
+  <tr><td>Q12</td><td>Android 17 local-network permission likely to change discovery path?</td><td>Possibly (system-mediated picker). The versioned permission adapter + testing Android 16 restriction mode now is the right hedge — approved.</td></tr>
+</table></div>
+
+<h2><span class="num">5.</span>Phase dispositions</h2>
+<div class="table-wrap"><table>
+  <tr><th>Phase</th><th>Disposition</th><th>Note</th></tr>
+  <tr><td>0 — Feasibility spikes &amp; ADR</td><td><span class="tag approve">approve</span></td><td>Add a spike: prove the <em>commitment-based</em> SAS matches byte-for-byte across Kotlin and C++, not the v1 truncated-hash SAS.</td></tr>
+  <tr><td>1 — Transport-neutral core</td><td><span class="tag approve">approve</span></td><td>Correct first move; no security surface. While here, ensure the ADB provider is behind a build flag (§2.1).</td></tr>
+  <tr><td>2 — Identity, TLS &amp; pairing</td><td><span class="tag block">block</span></td><td>Redesign the SAS per §1 before implementing. This is the gate the plan's own §16 warning is about.</td></tr>
+  <tr><td>3 — Android NSD host &amp; UI</td><td><span class="tag revise">revise</span></td><td>Resolve FGS type (§2.2) and the personal-name default (§3) during implementation.</td></tr>
+  <tr><td>4 — Linux discovery &amp; pairing UI</td><td><span class="tag approve">approve</span></td><td>Include the manual-IP diagnostic fallback (§Q7) and Avahi-absence handling.</td></tr>
+  <tr><td>5 — Camera stream over Wi-Fi</td><td><span class="tag approve">approve</span></td><td>Reuses the proven media loop; establish the latency baseline here at the latest.</td></tr>
+  <tr><td>6 — Recovery, controls, performance</td><td><span class="tag approve">approve</span></td><td>Strict-pin reconnect and bounded queues are right. Decide cert-expiry-vs-pin policy (§2.4) before soak.</td></tr>
+  <tr><td>7 — Packaging, docs, hardening</td><td><span class="tag revise">revise</span></td><td>Make "release build contains no ADB transport" a hard gate; ship the redesigned threat model.</td></tr>
+</table></div>
+
+<h2><span class="num">6.</span>Concrete replacements proposed</h2>
+<ol>
+  <li><strong>SAS:</strong> replace the truncated-hash-of-certs with commit-before-reveal nonce exchange, SAS bound to both cert
+  fingerprints (and ideally the TLS exporter). §1 has the exact construction.</li>
+  <li><strong>ADB:</strong> compile-time-gated dev-only transport, excluded from release artifacts; fix or excise the abstract-socket
+  auth gap regardless.</li>
+  <li><strong>FGS:</strong> ship <code>camera</code> only unless an on-device test proves <code>connectedDevice</code> is required.</li>
+  <li><strong>Certs:</strong> pin the key/SPKI hash and treat it as the sole trust anchor; don't let <code>NotAfter</code> silently
+  kill pairings.</li>
+  <li><strong>MITM test (§13.3):</strong> upgrade it to model a <em>grinding</em> relay (attacker chooses its certs), not just a
+  transparent one — the v1 SAS passes the naïve test and fails the real one.</li>
+</ol>
+
+<p class="muted" style="margin-top:3rem;border-top:1px solid var(--border);padding-top:1rem">
+Review of Wi-Fi Migration Plan v1 · Claude · 2026-08-10 · one critical (SAS, §1), four medium (§2), minor/privacy (§3).
+Recommendation: proceed through Phase 1; hold Phase 2 for the SAS redesign + external crypto review.</p>
+</div>
+</body>
+</html>
