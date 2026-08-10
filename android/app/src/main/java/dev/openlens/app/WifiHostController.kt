@@ -162,9 +162,14 @@ class WifiHostController(context: Context) : AutoCloseable {
 
     fun forgetComputer() {
         peerStore.forget()
-        pairingWindowDeadline = System.currentTimeMillis() + 120_000
+        refreshPairingWindow()
         WifiPairingStatus.clear("Computer forgotten. Pair again from the desktop app.")
         updateAvailability("Ready to pair with a computer.")
+    }
+
+    fun refreshPairingWindow() {
+        pairingWindowDeadline = System.currentTimeMillis() + 120_000
+        updateAvailability("Ready to pair for the next two minutes.")
     }
 
     private fun register(port: Int) {
@@ -225,6 +230,12 @@ class WifiHostController(context: Context) : AutoCloseable {
                     runCatching { tcpSocket.close() }
                     throw error
                 }
+                accepted.enabledProtocols = arrayOf("TLSv1.3")
+                accepted.useClientMode = false
+                accepted.needClientAuth = true
+                accepted.soTimeout = 10_000
+                accepted.startHandshake()
+                accepted.soTimeout = 45_000
                 if (!allowConnection()) {
                     runCatching { accepted.close() }
                     continue
@@ -254,11 +265,6 @@ class WifiHostController(context: Context) : AutoCloseable {
     private fun handleClient(socket: SSLSocket) {
         var transferred = false
         try {
-            socket.enabledProtocols = arrayOf("TLSv1.3")
-            socket.useClientMode = false
-            socket.needClientAuth = true
-            socket.startHandshake()
-            socket.soTimeout = 45_000
             val certificate = socket.session.peerCertificates.firstOrNull() as? X509Certificate
                 ?: error("Desktop did not present an identity certificate.")
             val desktopPin = MessageDigest.getInstance("SHA-256").digest(certificate.publicKey.encoded)

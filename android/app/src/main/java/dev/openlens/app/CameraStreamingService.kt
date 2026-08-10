@@ -154,15 +154,32 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
             }
             MessageType.CONFIGURE.wireValue -> {
                 val json = message.payload.decodeToString()
-                val basePreset = if (json.intValue("height", 1080) == 720) {
+                val preferences = OpenLensPreferences.load(this)
+                val desktopPreset = if (json.intValue("height", 1080) == 720) {
                     CertifiedPresets.HD_720P30
                 } else {
                     CertifiedPresets.FULL_HD_1080P30
                 }
+                val basePreset = when (preferences.quality) {
+                    QualityPreference.DESKTOP -> desktopPreset
+                    QualityPreference.FULL_HD -> CertifiedPresets.FULL_HD_1080P30
+                    QualityPreference.HD -> CertifiedPresets.HD_720P30
+                }
+                val desktopBitrate = json.intValue("bitrate", basePreset.bitrate).coerceIn(2_000_000, 16_000_000)
                 requestedPreset = basePreset.copy(
-                    bitrate = json.intValue("bitrate", basePreset.bitrate).coerceIn(2_000_000, 16_000_000),
+                    bitrate = when (preferences.bitrate) {
+                        BitratePreference.DESKTOP -> desktopBitrate
+                        BitratePreference.DATA_SAVER -> 4_000_000
+                        BitratePreference.BALANCED -> 8_000_000
+                        BitratePreference.QUALITY -> 12_000_000
+                    },
                 )
-                facing = if (json.stringValue("facing", "back") == "front") Facing.FRONT else Facing.BACK
+                facing = when (preferences.camera) {
+                    CameraPreference.DESKTOP ->
+                        if (json.stringValue("facing", "back") == "front") Facing.FRONT else Facing.BACK
+                    CameraPreference.REAR -> Facing.BACK
+                    CameraPreference.FRONT -> Facing.FRONT
+                }
                 startCapture(requestedPreset)
                 sendMetadata(
                     MessageType.CONFIGURED,
@@ -187,17 +204,30 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     private fun startCapture(preset: VideoPreset) {
         camera?.close()
         encoder?.close()
+        val selectedCamera = CameraEngine(this, this).use { engine ->
+            engine.enumerate().firstOrNull { it.facing == facing }
+        } ?: error("The selected camera is unavailable.")
+        val availablePreset = CertifiedPresets.choose(preset, selectedCamera.presets)
+            ?: error("No supported streaming resolution is available on the selected camera.")
+        requestedPreset = availablePreset.copy(bitrate = preset.bitrate)
         streamId += 1
         val newEncoder = AvcEncoder(this)
         encoder = newEncoder
-        val encoderSurface = newEncoder.start(EncoderConfig(preset.width, preset.height, preset.fps, preset.bitrate))
+        val encoderSurface = newEncoder.start(
+            EncoderConfig(
+                requestedPreset.width,
+                requestedPreset.height,
+                requestedPreset.fps,
+                requestedPreset.bitrate,
+            ),
+        )
         val surfaces = buildList {
             add(encoderSurface)
             PreviewSurfaceRegistry.surface?.takeIf { it.isValid }?.let(::add)
         }
         val newCamera = CameraEngine(this, this)
         camera = newCamera
-        newCamera.start(facing, preset, surfaces)
+        newCamera.start(facing, requestedPreset, surfaces)
         newEncoder.requestKeyframe()
     }
 
