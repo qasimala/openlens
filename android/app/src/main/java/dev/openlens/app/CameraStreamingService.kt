@@ -72,6 +72,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
         }
     }
     private var frames = 0L
+    private var encodedUnits = 0L
     private var bytes = 0L
     private var dropped = 0L
 
@@ -335,6 +336,11 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
 
     override fun onAccessUnit(unit: EncodedAccessUnit) {
         if (!running.get() || !connectionActive.get()) return
+        encodedUnits += 1
+        if (encodedUnits % 100L == 0L) {
+            val lagMs = (System.nanoTime() / 1_000 - unit.ptsUs) / 1_000
+            Log.i(TAG, "camera→encoder-out latency ≈ ${lagMs}ms")
+        }
         val type = if (unit.isCodecConfig) MessageType.VIDEO_CONFIG else MessageType.VIDEO_FRAME
         var flags = if (unit.isCodecConfig) MessageFlags.CONFIG else 0
         if (unit.isKeyframe) flags = flags or MessageFlags.KEYFRAME

@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <memory>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <pwd.h>
 #include <sstream>
 #include <stdexcept>
@@ -168,6 +169,8 @@ void make_identity(const std::string& certificate_path, const std::string& key_p
                   static_cast<long>((timeout.count() % 1000) * 1000)};
     ::setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &value, sizeof(value));
     ::setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &value, sizeof(value));
+    const int no_delay = 1;
+    ::setsockopt(descriptor, IPPROTO_TCP, TCP_NODELAY, &no_delay, sizeof(no_delay));
     if (::connect(descriptor, candidate->ai_addr, candidate->ai_addrlen) == 0) {
       connected = descriptor;
       break;

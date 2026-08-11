@@ -25,12 +25,14 @@ struct H264Decoder::Impl {
     context = avcodec_alloc_context3(codec);
     decoded = av_frame_alloc();
     converted = av_frame_alloc();
-    if (context == nullptr || decoded == nullptr || converted == nullptr ||
-        avcodec_open2(context, codec, nullptr) < 0) {
+    if (context == nullptr || decoded == nullptr || converted == nullptr)
       throw std::runtime_error("could not initialize FFmpeg H.264 decoder");
-    }
+    // Must be set before avcodec_open2: the default frame-threaded decoding
+    // buffers one frame per thread, adding hundreds of milliseconds of latency.
     context->flags |= AV_CODEC_FLAG_LOW_DELAY;
     context->thread_count = 1;
+    if (avcodec_open2(context, codec, nullptr) < 0)
+      throw std::runtime_error("could not initialize FFmpeg H.264 decoder");
   }
 
   ~Impl() {

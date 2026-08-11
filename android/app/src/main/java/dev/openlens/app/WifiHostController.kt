@@ -152,6 +152,7 @@ class WifiHostController(context: Context) : AutoCloseable {
      * takes over the socket, it returns while the stream continues elsewhere.
      */
     fun serveSocket(tcpSocket: java.net.Socket, handshakeTimeoutMillis: Int = 45_000) {
+        runCatching { tcpSocket.tcpNoDelay = true }
         val accepted = try {
             tlsContext.socketFactory.createSocket(
                 tcpSocket,

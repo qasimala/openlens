@@ -67,6 +67,11 @@ class AvcEncoder(private val listener: EncoderListener) : AutoCloseable {
             setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileMain)
             setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
             setInteger(MediaFormat.KEY_PRIORITY, 0)
+            // Without these, vendor encoders may pipeline many frames internally.
+            setInteger(MediaFormat.KEY_LATENCY, 0)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+            }
         }
         selectedCodec.setCallback(object : MediaCodec.Callback() {
             override fun onInputBufferAvailable(codec: MediaCodec, index: Int) = Unit
