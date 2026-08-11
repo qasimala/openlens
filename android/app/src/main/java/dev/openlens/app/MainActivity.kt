@@ -4,6 +4,7 @@ package dev.openlens.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.view.Surface
@@ -57,6 +58,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -356,10 +358,22 @@ private fun PreviewCard(
     settings: OpenLensSettings,
     onFocus: (Float, Float) -> Unit,
 ) {
-    Box(
-        modifier = Modifier
+    // The camera renders upright for the current orientation, so the preview
+    // box must follow it: 16:9 in landscape, 9:16 (narrowed, centred) in
+    // portrait — otherwise portrait video is stretched into a landscape box.
+    val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    val shapeModifier = if (portrait) {
+        Modifier
+            .fillMaxWidth(0.62f)
+            .aspectRatio(9f / 16f)
+    } else {
+        Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
+    }
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = shapeModifier
             .clip(RoundedCornerShape(22.dp))
             .background(Color.Black),
     ) {
@@ -403,6 +417,7 @@ private fun PreviewCard(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
     }
 }
 
