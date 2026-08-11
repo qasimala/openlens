@@ -6,6 +6,7 @@ binary="$repo_root/build/desktop-debug/desktop/gui/openlens-desktop"
 desktop_file="$repo_root/packaging/linux/dev.openlens.OpenLens.desktop"
 icon="$repo_root/packaging/linux/openlens.svg"
 plugin="$repo_root/build/desktop-debug/desktop/obs/openlens-obs.so"
+apk="$repo_root/android/app/build/outputs/apk/debug/app-debug.apk"
 local_root="${XDG_DATA_HOME:-$HOME/.local/share}"
 
 if [[ ! -x "$binary" ]]; then
@@ -16,6 +17,7 @@ fi
 install -d "$HOME/.local/bin" "$local_root/applications" "$local_root/icons/hicolor/scalable/apps" "$local_root/openlens"
 install -m 0755 "$binary" "$HOME/.local/bin/openlens-desktop"
 install -m 0755 "$plugin" "$local_root/openlens/openlens-obs.so"
+install -m 0644 "$apk" "$local_root/openlens/openlens-debug.apk"
 install -m 0644 "$desktop_file" "$local_root/applications/dev.openlens.OpenLens.desktop"
 install -m 0644 "$icon" "$local_root/icons/hicolor/scalable/apps/openlens.svg"
 

@@ -89,7 +89,7 @@ object WifiPairingStatus {
     }
 }
 
-object WifiSocketRegistry {
+internal object WifiSocketRegistry {
     private val pending = AtomicReference<SSLSocket?>()
 
     fun offer(socket: SSLSocket): Boolean = pending.compareAndSet(null, socket)
@@ -130,27 +130,55 @@ class WifiHostController(context: Context) : AutoCloseable {
         }
     }
 
+    private val tlsContext: SSLContext by lazy {
+        val trust = object : X509TrustManager {
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                require(!chain.isNullOrEmpty()) { "Desktop did not present an identity certificate." }
+            }
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                require(!chain.isNullOrEmpty()) { "Desktop did not present an identity certificate." }
+            }
+        }
+        SSLContext.getInstance("TLS", org.conscrypt.Conscrypt.newProvider()).apply {
+            init(WifiIdentity.keyManagers(), arrayOf(trust), SecureRandom())
+        }
+    }
+
+    /**
+     * Wraps an already-connected transport socket (Wi-Fi accept or the USB accessory
+     * bridge) with this phone acting as the TLS client, then serves the OpenLens
+     * request on it. Blocks until the request is handled; when the camera stream
+     * takes over the socket, it returns while the stream continues elsewhere.
+     */
+    fun serveSocket(tcpSocket: java.net.Socket, handshakeTimeoutMillis: Int = 45_000) {
+        val accepted = try {
+            tlsContext.socketFactory.createSocket(
+                tcpSocket,
+                tcpSocket.inetAddress.hostAddress,
+                tcpSocket.port,
+                true,
+            ) as SSLSocket
+        } catch (error: Throwable) {
+            runCatching { tcpSocket.close() }
+            throw error
+        }
+        accepted.useClientMode = true
+        accepted.enabledProtocols = arrayOf("TLSv1.3")
+        accepted.soTimeout = handshakeTimeoutMillis
+        accepted.startHandshake()
+        accepted.soTimeout = 45_000
+        handleClient(accepted)
+    }
+
     fun start() {
         if (!running.compareAndSet(false, true)) return
         try {
-            val trust = object : X509TrustManager {
-                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                    require(!chain.isNullOrEmpty()) { "Desktop did not present an identity certificate." }
-                }
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-            }
-            val tlsContext = SSLContext.getInstance("TLS").apply {
-                init(WifiIdentity.keyManagers(), arrayOf(trust), SecureRandom())
-            }
-            // Wrap accepted TCP sockets explicitly. Some Android/Conscrypt builds stall
-            // when an SSLSocket returned directly by SSLServerSocket.accept() is handed
-            // to another thread before its first I/O.
             val listener = ServerSocket(0)
             listener.reuseAddress = true
             server = listener
             register(listener.localPort)
-            thread(name = "OpenLensWifiAccept") { acceptLoop(listener, tlsContext) }
+            thread(name = "OpenLensWifiAccept") { acceptLoop(listener) }
         } catch (error: Throwable) {
             Log.e(TAG, "Could not start Wi-Fi host", error)
             running.set(false)
@@ -215,39 +243,27 @@ class WifiHostController(context: Context) : AutoCloseable {
         )
     }
 
-    private fun acceptLoop(listener: ServerSocket, tlsContext: SSLContext) {
+    private fun acceptLoop(listener: ServerSocket) {
         while (running.get()) {
             try {
                 val tcpSocket = listener.accept()
-                val accepted = try {
-                    tlsContext.socketFactory.createSocket(
-                        tcpSocket,
-                        tcpSocket.inetAddress.hostAddress,
-                        tcpSocket.port,
-                        true,
-                    ) as SSLSocket
-                } catch (error: Throwable) {
-                    runCatching { tcpSocket.close() }
-                    throw error
-                }
-                accepted.enabledProtocols = arrayOf("TLSv1.3")
-                accepted.useClientMode = false
-                accepted.needClientAuth = true
-                accepted.soTimeout = 10_000
-                accepted.startHandshake()
-                accepted.soTimeout = 45_000
                 if (!allowConnection()) {
-                    runCatching { accepted.close() }
+                    runCatching { tcpSocket.close() }
                     continue
                 }
                 if (activeClients.incrementAndGet() > MAX_CLIENTS) {
                     activeClients.decrementAndGet()
-                    runCatching { accepted.close() }
+                    runCatching { tcpSocket.close() }
                     continue
                 }
                 thread(name = "OpenLensWifiClient") {
                     try {
-                        handleClient(accepted)
+                        serveSocket(tcpSocket)
+                    } catch (error: Throwable) {
+                        Log.e(TAG, "Wi-Fi client failed", error)
+                        if (running.get() && !pairingInProgress.get()) {
+                            updateAvailability(error.message ?: "A secure Wi-Fi connection failed.")
+                        }
                     } finally {
                         activeClients.decrementAndGet()
                     }

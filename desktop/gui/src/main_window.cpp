@@ -3,15 +3,18 @@
 
 #include "openlens/media.hpp"
 #include "openlens/session.hpp"
+#include "openlens/usb_transport.hpp"
 #include "openlens/wifi_discovery.hpp"
 #include "openlens/wifi_transport.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QDialog>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -22,8 +25,10 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QNetworkInterface>
 #include <QPainter>
 #include <QProcess>
 #include <QPushButton>
@@ -35,7 +40,10 @@
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QSystemTrayIcon>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -50,6 +58,116 @@ namespace {
 constexpr auto green = "#38d996";
 constexpr auto muted = "#8faea0";
 constexpr auto red = "#ff8078";
+constexpr quint16 installerPort = 8765;
+
+bool isPrivateIpv4(const QHostAddress& address) {
+  const quint32 value = address.toIPv4Address();
+  return (value & 0xff000000U) == 0x0a000000U ||
+         (value & 0xfff00000U) == 0xac100000U ||
+         (value & 0xffff0000U) == 0xc0a80000U;
+}
+
+QHostAddress localInstallAddress() {
+  QHostAddress fallback;
+  for (const auto& address : QNetworkInterface::allAddresses()) {
+    if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isLoopback())
+      continue;
+    if (isPrivateIpv4(address))
+      return address;
+    if (fallback.isNull())
+      fallback = address;
+  }
+  return fallback;
+}
+
+QString localSubnet(const QHostAddress& wanted) {
+  for (const auto& interface : QNetworkInterface::allInterfaces()) {
+    for (const auto& entry : interface.addressEntries()) {
+      if (entry.ip() != wanted || entry.prefixLength() < 0)
+        continue;
+      const int prefix = entry.prefixLength();
+      const auto subnet = QHostAddress::parseSubnet(
+          wanted.toString() + QStringLiteral("/") + QString::number(prefix));
+      if (!subnet.first.isNull())
+        return subnet.first.toString() + QStringLiteral("/") + QString::number(prefix);
+    }
+  }
+  return wanted.toString() + QStringLiteral("/32");
+}
+
+class ApkServer final : public QObject {
+public:
+  explicit ApkServer(QString apkPath) : apkPath_(std::move(apkPath)) {
+    connect(&server_, &QTcpServer::newConnection, this, [this] {
+      while (server_.hasPendingConnections()) {
+        auto* socket = server_.nextPendingConnection();
+        socket->setParent(this);
+        connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
+          if (socket->property("openlensServed").toBool() || !socket->canReadLine())
+            return;
+          socket->setProperty("openlensServed", true);
+          const QByteArray request = socket->readLine(4096);
+          socket->readAll();
+          if (!request.startsWith("GET /openlens.apk ")) {
+            socket->write("HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+            socket->disconnectFromHost();
+            return;
+          }
+          QFile apk(apkPath_);
+          if (!apk.open(QIODevice::ReadOnly)) {
+            socket->write("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n"
+                          "Content-Length: 0\r\n\r\n");
+            socket->disconnectFromHost();
+            return;
+          }
+          const QByteArray contents = apk.readAll();
+          const QByteArray headers =
+              QByteArrayLiteral("HTTP/1.1 200 OK\r\n"
+                                "Content-Type: application/vnd.android.package-archive\r\n"
+                                "Content-Disposition: attachment; filename=OpenLens.apk\r\n"
+                                "Cache-Control: no-store\r\nConnection: close\r\nContent-Length: ") +
+              QByteArray::number(contents.size()) + QByteArrayLiteral("\r\n\r\n");
+          socket->write(headers);
+          socket->write(contents);
+          socket->disconnectFromHost();
+        });
+        connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+      }
+    });
+  }
+
+  QUrl start() {
+    const QHostAddress address = localInstallAddress();
+    if (address.isNull())
+      throw std::runtime_error("no local IPv4 network address is available");
+    if (!server_.listen(QHostAddress::AnyIPv4, installerPort))
+      throw std::runtime_error(server_.errorString().toStdString());
+    QUrl result;
+    result.setScheme(QStringLiteral("http"));
+    result.setHost(address.toString());
+    result.setPort(static_cast<int>(server_.serverPort()));
+    result.setPath(QStringLiteral("/openlens.apk"));
+    return result;
+  }
+
+private:
+  QString apkPath_;
+  QTcpServer server_;
+};
+
+QPixmap qrCode(const QString& value) {
+  QProcess process;
+  process.start(QStringLiteral("qrencode"),
+                {QStringLiteral("-t"), QStringLiteral("PNG"), QStringLiteral("-o"),
+                 QStringLiteral("-"), QStringLiteral("-s"), QStringLiteral("9"),
+                 QStringLiteral("-m"), QStringLiteral("2"), value});
+  if (!process.waitForStarted(2000) || !process.waitForFinished(5000) ||
+      process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    return {};
+  QPixmap image;
+  image.loadFromData(process.readAllStandardOutput(), "PNG");
+  return image;
+}
 
 void statusText(QLabel* label, bool ready, const QString& title, const QString& detail) {
   const QString color = ready ? green : red;
@@ -185,7 +303,7 @@ void MainWindow::buildInterface() {
     QFrame#statusCard, QGroupBox { background:#0d2119; border:1px solid #1f3c30; border-radius:12px; }
     QGroupBox { margin-top:13px; padding:16px 12px 12px 12px; font-weight:700; }
     QGroupBox::title { subcontrol-origin:margin; left:13px; padding:0 5px; color:#a6d9c2; }
-    QComboBox, QSpinBox, QDoubleSpinBox { background:#102a20; border:1px solid #2c5242; border-radius:8px; padding:7px; min-height:21px; }
+    QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit { background:#102a20; border:1px solid #2c5242; border-radius:8px; padding:7px; min-height:21px; }
     QComboBox::drop-down { border:0; width:24px; }
     QPushButton { background:#163a2c; border:1px solid #2c5c48; border-radius:9px; padding:9px 14px; font-weight:650; }
     QPushButton:hover { background:#1d4b39; }
@@ -217,6 +335,8 @@ void MainWindow::buildInterface() {
   titles->addWidget(subtitle);
   header->addLayout(titles);
   header->addStretch();
+  auto* installPhone = new QPushButton(QStringLiteral("Install phone app"));
+  header->addWidget(installPhone, 0, Qt::AlignTop);
   overallStatus_ = new QLabel(QStringLiteral("Checking setup…"));
   overallStatus_->setObjectName("overall");
   header->addWidget(overallStatus_, 0, Qt::AlignTop);
@@ -322,6 +442,7 @@ void MainWindow::buildInterface() {
 
   connect(refresh_, &QPushButton::clicked, this, &MainWindow::refreshReadiness);
   connect(start_, &QPushButton::clicked, this, &MainWindow::toggleSession);
+  connect(installPhone, &QPushButton::clicked, this, &MainWindow::showAndroidInstall);
   connect(installPlugin_, &QPushButton::clicked, this, &MainWindow::installObsPlugin);
   connect(obsButton, &QPushButton::clicked, this, &MainWindow::openObs);
   connect(device_, &QComboBox::currentIndexChanged, this, &MainWindow::updateControls);
@@ -335,7 +456,10 @@ void MainWindow::buildInterface() {
   });
   trayMenu->addAction(QStringLiteral("Stop camera"), this, &MainWindow::stopSession);
   trayMenu->addSeparator();
-  trayMenu->addAction(QStringLiteral("Quit"), this, &QWidget::close);
+  trayMenu->addAction(QStringLiteral("Quit"), this, [this] {
+    quitting_ = true;
+    close();
+  });
   tray_->setContextMenu(trayMenu);
   tray_->setToolTip(QStringLiteral("OpenLens"));
   if (QSystemTrayIcon::isSystemTrayAvailable())
@@ -388,6 +512,22 @@ QString MainWindow::findBundledPlugin() {
   return {};
 }
 
+QString MainWindow::findBundledApk() {
+  const QDir applicationDirectory(QCoreApplication::applicationDirPath());
+  const QString configured = qEnvironmentVariable("OPENLENS_ANDROID_APK");
+  const QStringList candidates{
+      configured,
+      applicationDirectory.filePath(QStringLiteral("openlens-debug.apk")),
+      applicationDirectory.filePath(
+          QStringLiteral("../../../../android/app/build/outputs/apk/debug/app-debug.apk")),
+      QDir::homePath() + QStringLiteral("/.local/share/openlens/openlens-debug.apk"),
+  };
+  for (const auto& candidate : candidates)
+    if (!candidate.isEmpty() && QFileInfo::exists(candidate))
+      return QFileInfo(candidate).canonicalFilePath();
+  return {};
+}
+
 Readiness MainWindow::inspectSystem(const QString&) {
   Readiness result;
   result.virtualCameraReady = std::filesystem::exists("/dev/video42");
@@ -407,6 +547,25 @@ Readiness MainWindow::inspectSystem(const QString&) {
     }
   } catch (const std::exception& error) {
     result.error = QString::fromUtf8(error.what());
+  }
+  try {
+    openlens::WifiIdentityStore identity;
+    // A USB phone is authenticated by its pinned TLS identity, so any stored
+    // pairing (Wi-Fi or USB) makes it connectable.
+    const bool anyPaired = !identity.peers().empty();
+    for (const auto& phone : openlens::list_usb_phones()) {
+      DeviceInfo device;
+      device.key = QStringLiteral("usb:") + QString::fromStdString(phone.serial);
+      device.serial = QString::fromStdString(phone.serial);
+      device.model = phone.product.empty() ? QStringLiteral("Android phone over USB")
+                                           : QString::fromStdString(phone.product);
+      device.state = QStringLiteral("device");
+      device.appInstalled = true;
+      device.usb = true;
+      device.paired = anyPaired;
+      result.devices.push_back(std::move(device));
+    }
+  } catch (const std::exception&) {
   }
   return result;
 }
@@ -428,10 +587,16 @@ void MainWindow::applyReadiness() {
     const QSignalBlocker blocker(device_);
     device_->clear();
     for (const auto& found : readiness_.devices) {
-      const QString label = found.wifi
-                                ? found.model + (found.paired ? QStringLiteral(" · Paired")
-                                                              : QStringLiteral(" · Pair once"))
-                                : found.model + QStringLiteral(" · USB development mode");
+      QString label;
+      if (found.wifi) {
+        label = found.model + (found.paired ? QStringLiteral(" · Wi-Fi · Paired")
+                                            : QStringLiteral(" · Wi-Fi · Pair once"));
+      } else if (found.usb) {
+        label = found.model + (found.paired ? QStringLiteral(" · USB · Paired")
+                                            : QStringLiteral(" · USB · Pair once"));
+      } else {
+        label = found.model + QStringLiteral(" · USB development mode");
+      }
       device_->addItem(label, found.key);
     }
     const int previousIndex = device_->findData(previous);
@@ -468,6 +633,28 @@ void MainWindow::applyReadiness() {
   overallStatus_->setText(ready ? QStringLiteral("Ready to stream")
                           : hasPhone && selected->wifi && !paired ? QStringLiteral("Pair once")
                                                                   : QStringLiteral("Searching…"));
+  if (!streaming_) {
+    if (hasPhone && selected->wifi && !paired) {
+      setSessionState(QStringLiteral("Phone found — pair once"),
+                      QStringLiteral("OpenLens found %1. Click “Pair phone” below, then confirm "
+                                     "the same six-digit code on both screens.")
+                          .arg(selected->model),
+                      false);
+    } else if (hasPhone && paired) {
+      setSessionState(
+          readiness_.virtualCameraReady ? QStringLiteral("Ready when you are")
+                                        : QStringLiteral("Phone paired — finish OBS setup"),
+          readiness_.virtualCameraReady
+              ? QStringLiteral("Click “Start camera” to start the phone automatically.")
+              : QStringLiteral("The phone is paired. Set up /dev/video42 before starting the camera."),
+          false);
+    } else {
+      setSessionState(QStringLiteral("Looking for your phone"),
+                      QStringLiteral("Open OpenLens on your phone and keep both devices on the "
+                                     "same local network."),
+                      false);
+    }
+  }
   refresh_->setEnabled(true);
   refresh_->setText(QStringLiteral("Refresh"));
   installPlugin_->setText(readiness_.obsPluginReady ? QStringLiteral("Repair OBS plugin")
@@ -488,10 +675,13 @@ void MainWindow::updateControls() {
   const auto selected =
       std::find_if(readiness_.devices.cbegin(), readiness_.devices.cend(),
                    [this](const DeviceInfo& value) { return value.key == device_->currentData(); });
-  const bool ready = selected != readiness_.devices.cend() && selected->wifi &&
-                     selected->state == QStringLiteral("device") && readiness_.virtualCameraReady;
-  start_->setEnabled(streaming_ || ready);
-  if (!streaming_ && selected != readiness_.devices.cend() && selected->wifi)
+  const bool phoneAvailable = selected != readiness_.devices.cend() &&
+                              (selected->wifi || selected->usb) &&
+                              selected->state == QStringLiteral("device");
+  const bool canContinue = phoneAvailable &&
+                           (!selected->paired || readiness_.virtualCameraReady);
+  start_->setEnabled(streaming_ || canContinue);
+  if (!streaming_ && selected != readiness_.devices.cend() && (selected->wifi || selected->usb))
     start_->setText(selected->paired ? QStringLiteral("Start camera")
                                      : QStringLiteral("Pair phone"));
   const std::array<QWidget*, 9> controls{device_,   quality_,  facing_, bitrate_, zoom_,
@@ -506,11 +696,10 @@ void MainWindow::toggleSession() {
     return;
   }
   const DeviceInfo* selected = selectedDevice();
-  if (selected == nullptr || !selected->wifi || !readiness_.virtualCameraReady) {
+  if (selected == nullptr || (!selected->wifi && !selected->usb)) {
     QMessageBox::information(
         this, QStringLiteral("OpenLens is not ready"),
-        QStringLiteral(
-            "Open OpenLens on your phone, then make sure the OBS virtual camera is available."));
+        QStringLiteral("Open OpenLens on your phone and keep both devices on the same local network."));
     return;
   }
   if (!selected->paired) {
@@ -521,29 +710,36 @@ void MainWindow::toggleSession() {
     setSessionState(QStringLiteral("Pairing phone"),
                     QStringLiteral("Creating one matching code on both devices…"), true);
     const openlens::WifiDevice wifiDevice = selected->wifiDevice;
-    worker_ = std::thread([this, wifiDevice] {
+    const bool viaUsb = selected->usb;
+    worker_ = std::thread([this, wifiDevice, viaUsb] {
       QString error;
       try {
         openlens::WifiIdentityStore identity;
-        const auto pairing =
-            openlens::pair_wifi_device(wifiDevice, identity, [this](std::string_view code) {
-              bool accepted = false;
-              QMetaObject::invokeMethod(
-                  this,
-                  [this, code = QString::fromUtf8(code.data(), static_cast<qsizetype>(code.size())),
-                   &accepted] {
-                    accepted = QMessageBox::question(
-                                   this, QStringLiteral("Check the pairing code"),
-                                   QStringLiteral("Does this code match your phone?\n\n%1\n\n"
-                                                  "Press Codes match here, then on your phone.")
-                                       .arg(code),
-                                   QMessageBox::Yes | QMessageBox::Cancel,
-                                   QMessageBox::Yes) == QMessageBox::Yes;
-                  },
-                  Qt::BlockingQueuedConnection);
-              return accepted;
-            });
-        static_cast<void>(pairing);
+        const openlens::PairingConfirmation confirm = [this](std::string_view code) {
+          bool accepted = false;
+          QMetaObject::invokeMethod(
+              this,
+              [this, code = QString::fromUtf8(code.data(), static_cast<qsizetype>(code.size())),
+               &accepted] {
+                accepted = QMessageBox::question(
+                               this, QStringLiteral("Check the pairing code"),
+                               QStringLiteral("Does this code match your phone?\n\n%1\n\n"
+                                              "Press Codes match here, then on your phone.")
+                                   .arg(code),
+                               QMessageBox::Yes | QMessageBox::Cancel,
+                               QMessageBox::Yes) == QMessageBox::Yes;
+              },
+              Qt::BlockingQueuedConnection);
+          return accepted;
+        };
+        if (viaUsb) {
+          auto link = openlens::UsbAccessoryLink::open();
+          static_cast<void>(openlens::pair_connected_descriptor(link.release_descriptor(),
+                                                                "usb:" + link.serial(),
+                                                                link.product(), identity, confirm));
+        } else {
+          static_cast<void>(openlens::pair_wifi_device(wifiDevice, identity, confirm));
+        }
       } catch (const std::exception& exception) {
         error = QString::fromUtf8(exception.what());
       }
@@ -567,11 +763,20 @@ void MainWindow::toggleSession() {
     });
     return;
   }
+  if (!readiness_.virtualCameraReady) {
+    QMessageBox::information(
+        this, QStringLiteral("Virtual camera is not ready"),
+        QStringLiteral("Your phone is paired. Set up /dev/video42, then click Start camera."));
+    return;
+  }
   saveSettings();
   if (worker_.joinable())
     worker_.join();
   openlens::SessionOptions options;
-  options.wifi_device = selected->wifiDevice;
+  if (selected->usb)
+    options.usb = true;
+  else
+    options.wifi_device = selected->wifiDevice;
   options.preset = quality_->currentData().toString().toStdString();
   options.facing = facing_->currentData().toString().toStdString();
   options.bitrate = bitrate_->value() * 1000000;
@@ -674,6 +879,119 @@ void MainWindow::showPreview(const QImage& image) {
   }
 }
 
+void MainWindow::showAndroidInstall() {
+  const QString apk = findBundledApk();
+  if (apk.isEmpty()) {
+    QMessageBox::warning(
+        this, QStringLiteral("Android app not found"),
+        QStringLiteral("Build or bundle openlens-debug.apk, then open this installer again."));
+    return;
+  }
+
+  auto server = std::make_unique<ApkServer>(apk);
+  QUrl download;
+  try {
+    download = server->start();
+  } catch (const std::exception& error) {
+    QMessageBox::warning(this, QStringLiteral("Could not share the Android app"),
+                         QString::fromUtf8(error.what()));
+    return;
+  }
+  apkServer_ = std::move(server);
+
+  QDialog dialog(this);
+  dialog.setWindowTitle(QStringLiteral("Install OpenLens on Android"));
+  dialog.setMinimumWidth(470);
+  auto* layout = new QVBoxLayout(&dialog);
+  layout->setContentsMargins(24, 22, 24, 22);
+  layout->setSpacing(12);
+  auto* title = new QLabel(QStringLiteral("Scan to install OpenLens"));
+  title->setObjectName("sessionTitle");
+  layout->addWidget(title);
+  auto* detail = new QLabel(
+      QStringLiteral("Connect the phone to the same local network, scan this code, then install "
+                     "the downloaded APK. No USB is required."));
+  detail->setObjectName("sessionDetail");
+  detail->setWordWrap(true);
+  layout->addWidget(detail);
+
+  auto* qr = new QLabel;
+  qr->setAlignment(Qt::AlignCenter);
+  const QPixmap image = qrCode(download.toString());
+  if (image.isNull()) {
+    qr->setText(QStringLiteral("QR generation is unavailable. Use the link below."));
+  } else {
+    qr->setPixmap(image);
+  }
+  layout->addWidget(qr);
+
+  auto* link = new QLineEdit(download.toString());
+  link->setReadOnly(true);
+  link->setMinimumHeight(38);
+  layout->addWidget(link);
+  auto* note = new QLabel(
+      QStringLiteral("The download is available only while OpenLens Desktop is running. If the "
+                     "phone cannot open the link, allow this one local port through the Linux "
+                     "firewall below."));
+  note->setObjectName("sessionDetail");
+  note->setWordWrap(true);
+  layout->addWidget(note);
+
+  auto* actions = new QHBoxLayout;
+  auto* firewall = new QPushButton(QStringLiteral("Allow through firewall"));
+  auto* copy = new QPushButton(QStringLiteral("Copy link"));
+  auto* close = new QPushButton(QStringLiteral("Done"));
+  close->setObjectName("primary");
+  actions->addWidget(firewall);
+  actions->addWidget(copy);
+  actions->addStretch();
+  actions->addWidget(close);
+  layout->addLayout(actions);
+  connect(copy, &QPushButton::clicked, &dialog, [link] {
+    QApplication::clipboard()->setText(link->text());
+  });
+  connect(firewall, &QPushButton::clicked, &dialog, [this, firewall, download] {
+    const QString pkexec = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
+    const QString ufw = QFileInfo::exists(QStringLiteral("/usr/sbin/ufw"))
+                            ? QStringLiteral("/usr/sbin/ufw")
+                            : QStandardPaths::findExecutable(QStringLiteral("ufw"));
+    if (pkexec.isEmpty() || ufw.isEmpty()) {
+      QMessageBox::information(
+          this, QStringLiteral("Firewall helper unavailable"),
+          QStringLiteral("Allow TCP port %1 from your local network in the Linux firewall.")
+              .arg(installerPort));
+      return;
+    }
+    firewall->setEnabled(false);
+    firewall->setText(QStringLiteral("Waiting for permission…"));
+    auto* process = new QProcess(firewall);
+    const QString subnet = localSubnet(QHostAddress(download.host()));
+    connect(process, &QProcess::finished, firewall,
+            [this, firewall, process](int exitCode, QProcess::ExitStatus status) {
+              const bool success = status == QProcess::NormalExit && exitCode == 0;
+              firewall->setEnabled(!success);
+              firewall->setText(success ? QStringLiteral("Firewall ready")
+                                        : QStringLiteral("Try firewall permission again"));
+              if (!success) {
+                const QString detail = QString::fromUtf8(process->readAllStandardError()).trimmed();
+                QMessageBox::warning(
+                    this, QStringLiteral("Firewall permission did not finish"),
+                    detail.isEmpty() ? QStringLiteral("The administrator prompt was cancelled.")
+                                     : detail);
+              }
+              process->deleteLater();
+            });
+    process->start(pkexec,
+                   {ufw, QStringLiteral("allow"), QStringLiteral("from"), subnet,
+                    QStringLiteral("to"), QStringLiteral("any"), QStringLiteral("port"),
+                    QString::number(installerPort), QStringLiteral("proto"),
+                    QStringLiteral("tcp"), QStringLiteral("comment"),
+                    QStringLiteral("OpenLens phone installer")});
+  });
+  connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+  dialog.exec();
+}
+
 void MainWindow::installObsPlugin() {
   const QString source = findBundledPlugin();
   if (source.isEmpty()) {
@@ -712,12 +1030,22 @@ void MainWindow::openObs() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+  if (!quitting_ && tray_ != nullptr && tray_->isVisible()) {
+    hide();
+    tray_->showMessage(QStringLiteral("OpenLens keeps running"),
+                       QStringLiteral("The camera stays available from the tray. "
+                                      "Choose Quit in the tray menu to exit."),
+                       QSystemTrayIcon::Information, 4000);
+    event->ignore();
+    return;
+  }
   if (streaming_) {
     const auto answer =
         QMessageBox::question(this, QStringLiteral("Stop the camera?"),
                               QStringLiteral("Closing OpenLens will stop the phone camera and "
                                              "remove the virtual camera feed from OBS."));
     if (answer != QMessageBox::Yes) {
+      quitting_ = false;
       event->ignore();
       return;
     }
@@ -727,6 +1055,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     worker_.join();
   saveSettings();
   event->accept();
+  // A visible tray icon keeps Qt >= 6.5 applications alive after the last
+  // window closes, so quitting must be explicit.
+  QCoreApplication::quit();
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event) {

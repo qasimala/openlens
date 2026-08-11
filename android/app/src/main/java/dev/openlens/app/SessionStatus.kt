@@ -40,4 +40,12 @@ object SessionStatus {
 object PreviewSurfaceRegistry {
     @Volatile
     var surface: Surface? = null
+        set(value) {
+            field = value
+            listener?.invoke()
+        }
+
+    /** Notified whenever the preview surface appears, changes, or is destroyed. */
+    @Volatile
+    var listener: (() -> Unit)? = null
 }

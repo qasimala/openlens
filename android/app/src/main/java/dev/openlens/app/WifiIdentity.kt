@@ -19,7 +19,8 @@ import javax.security.auth.x500.X500Principal
 import java.net.Socket
 
 object WifiIdentity {
-    private const val KEY_ALIAS = "openlens_wifi_identity_v1"
+    private const val KEY_ALIAS = "openlens_wifi_identity_v2"
+    private const val LEGACY_KEY_ALIAS = "openlens_wifi_identity_v1"
 
     fun keyManagers(): Array<javax.net.ssl.KeyManager> {
         val keyStore = loadStore()
@@ -37,6 +38,9 @@ object WifiIdentity {
 
     private fun loadStore(): KeyStore {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        // The v1 key only authorized SHA-256, which blocks Conscrypt's NONEwithECDSA
+        // TLS signing path, so it can never complete a handshake.
+        if (keyStore.containsAlias(LEGACY_KEY_ALIAS)) keyStore.deleteEntry(LEGACY_KEY_ALIAS)
         if (!keyStore.containsAlias(KEY_ALIAS)) generateIdentity()
         return KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     }
@@ -51,7 +55,9 @@ object WifiIdentity {
                 KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
             )
                 .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                .setDigests(KeyProperties.DIGEST_SHA256)
+                // DIGEST_NONE is required: Conscrypt hashes the TLS transcript itself and
+                // signs the raw digest through Keystore as NONEwithECDSA.
+                .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256)
                 .setCertificateSubject(X500Principal("CN=OpenLens phone"))
                 .setCertificateSerialNumber(BigInteger(160, java.security.SecureRandom()).abs())
                 .setCertificateNotBefore(now.time)
@@ -71,7 +77,13 @@ object WifiIdentity {
             keyType: Array<out String>?,
             issuers: Array<out Principal>?,
             socket: Socket?,
-        ): String? = delegate.chooseClientAlias(keyType, issuers, socket)
+        ): String = KEY_ALIAS
+
+        override fun chooseEngineClientAlias(
+            keyType: Array<out String>?,
+            issuers: Array<out Principal>?,
+            engine: SSLEngine?,
+        ): String = KEY_ALIAS
 
         override fun getServerAliases(keyType: String?, issuers: Array<out Principal>?): Array<String>? =
             arrayOf(KEY_ALIAS)

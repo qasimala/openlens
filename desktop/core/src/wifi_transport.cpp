@@ -7,6 +7,7 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cerrno>
 #include <charconv>
@@ -23,6 +24,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utility>
 
 namespace openlens {
 namespace {
@@ -177,9 +179,13 @@ void make_identity(const std::string& certificate_path, const std::string& key_p
   return connected;
 }
 
-[[nodiscard]] SslContext make_client_context(WifiIdentityStore& store) {
+// Phone identities are self-signed; chain trust is intentionally waived here because
+// authentication comes from SAS confirmation and SPKI pinning after the handshake.
+[[nodiscard]] int accept_self_signed_peer(int, X509_STORE_CTX*) { return 1; }
+
+[[nodiscard]] SslContext make_server_context(WifiIdentityStore& store) {
   store.ensure_identity();
-  SslContext context(SSL_CTX_new(TLS_client_method()), SSL_CTX_free);
+  SslContext context(SSL_CTX_new(TLS_server_method()), SSL_CTX_free);
   if (!context || SSL_CTX_set_min_proto_version(context.get(), TLS1_3_VERSION) != 1 ||
       SSL_CTX_set_max_proto_version(context.get(), TLS1_3_VERSION) != 1 ||
       SSL_CTX_use_certificate_file(context.get(), store.certificate_path().c_str(),
@@ -188,7 +194,8 @@ void make_identity(const std::string& certificate_path, const std::string& key_p
                                   SSL_FILETYPE_PEM) != 1 ||
       SSL_CTX_check_private_key(context.get()) != 1)
     throw std::runtime_error(openssl_error("could not load the desktop TLS identity"));
-  SSL_CTX_set_verify(context.get(), SSL_VERIFY_NONE, nullptr);
+  SSL_CTX_set_verify(context.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+                     accept_self_signed_peer);
   return context;
 }
 
@@ -199,28 +206,48 @@ struct ConnectedTls {
   pairing::Digest peer_pin{};
 
   ConnectedTls() = default;
-  ConnectedTls(ConnectedTls&& other) noexcept = default;
-  ConnectedTls& operator=(ConnectedTls&& other) noexcept = default;
+  ConnectedTls(ConnectedTls&& other) noexcept
+      : descriptor(std::exchange(other.descriptor, -1)), context(std::move(other.context)),
+        ssl(std::move(other.ssl)), peer_pin(other.peer_pin) {}
+  ConnectedTls& operator=(ConnectedTls&& other) noexcept {
+    if (this != &other) {
+      ssl = std::move(other.ssl);
+      context = std::move(other.context);
+      if (descriptor >= 0)
+        ::close(descriptor);
+      descriptor = std::exchange(other.descriptor, -1);
+      peer_pin = other.peer_pin;
+    }
+    return *this;
+  }
   ~ConnectedTls() {
     if (descriptor >= 0)
       ::close(descriptor);
   }
 };
 
-[[nodiscard]] ConnectedTls connect_tls(const WifiDevice& device, WifiIdentityStore& store,
-                                       std::chrono::milliseconds timeout) {
+// The desktop opens the transport connection but acts as the TLS server on it: Android's
+// Conscrypt server mode is unreliable on some devices while its client mode is not.
+// Takes ownership of the descriptor, which may be a TCP socket or any other
+// stream-like descriptor (such as the USB accessory bridge).
+[[nodiscard]] ConnectedTls tls_from_descriptor(int descriptor, WifiIdentityStore& store) {
   ConnectedTls connection;
-  connection.context = make_client_context(store);
-  connection.descriptor = connect_tcp(device, timeout);
+  connection.context = make_server_context(store);
+  connection.descriptor = descriptor;
   connection.ssl.reset(SSL_new(connection.context.get()));
   if (!connection.ssl || SSL_set_fd(connection.ssl.get(), connection.descriptor) != 1 ||
-      SSL_connect(connection.ssl.get()) != 1)
+      SSL_accept(connection.ssl.get()) != 1)
     throw std::runtime_error(openssl_error("secure connection to the phone failed"));
   Certificate peer(SSL_get1_peer_certificate(connection.ssl.get()), X509_free);
   if (!peer)
     throw std::runtime_error("phone did not present an identity certificate");
   connection.peer_pin = certificate_spki(peer.get());
   return connection;
+}
+
+[[nodiscard]] ConnectedTls connect_tls(const WifiDevice& device, WifiIdentityStore& store,
+                                       std::chrono::milliseconds timeout) {
+  return tls_from_descriptor(connect_tcp(device, timeout), store);
 }
 
 void ssl_write_all(SSL* ssl, std::string_view text) {
@@ -413,10 +440,11 @@ void WifiStream::close() noexcept {
   implementation_.reset();
 }
 
-PairingResult pair_wifi_device(const WifiDevice& device, WifiIdentityStore& store,
-                               const PairingConfirmation& confirm,
-                               std::chrono::milliseconds timeout) {
-  auto connection = connect_tls(device, store, timeout);
+namespace {
+
+[[nodiscard]] PairingResult pair_over(ConnectedTls connection, const std::string& device_id,
+                                      const std::string& device_name, WifiIdentityStore& store,
+                                      const PairingConfirmation& confirm) {
   ssl_write_all(connection.ssl.get(), "PAIR 2\n");
   const auto first = words(ssl_read_line(connection.ssl.get()));
   if (first.size() != 4 || first[0] != "PAIR1")
@@ -452,21 +480,64 @@ PairingResult pair_wifi_device(const WifiDevice& device, WifiIdentityStore& stor
   const auto result = words(ssl_read_line(connection.ssl.get()));
   if (result.size() != 1 || result[0] != "PAIR_OK")
     throw std::runtime_error("pairing was not confirmed on the phone");
-  WifiPeer peer{device.device_id, device.service_name, connection.peer_pin};
+  WifiPeer peer{device_id, device_name, connection.peer_pin};
   store.save_peer(peer);
   return PairingResult{peer, sas};
+}
+
+[[nodiscard]] WifiStream stream_over(ConnectedTls connection) {
+  ssl_write_all(connection.ssl.get(), "OPENLENS 2\n");
+  return WifiStream(std::make_unique<WifiStream::Impl>(WifiStream::Impl{std::move(connection)}));
+}
+
+} // namespace
+
+PairingResult pair_wifi_device(const WifiDevice& device, WifiIdentityStore& store,
+                               const PairingConfirmation& confirm,
+                               std::chrono::milliseconds timeout) {
+  return pair_over(connect_tls(device, store, timeout), device.device_id, device.service_name,
+                   store, confirm);
 }
 
 WifiStream connect_wifi_stream(const WifiDevice& device, WifiIdentityStore& store,
                                std::chrono::milliseconds timeout) {
   const auto peer = store.peer(device.device_id);
-  if (!peer)
+  const auto peers = store.peers();
+  if (!peer && peers.empty())
     throw std::runtime_error("this phone has not been paired with OpenLens yet");
   auto connection = connect_tls(device, store, timeout);
-  if (!pairing::constant_time_equal(peer->spki_pin, connection.peer_pin))
-    throw std::runtime_error("the phone identity changed; forget it and pair again");
-  ssl_write_all(connection.ssl.get(), "OPENLENS 2\n");
-  return WifiStream(std::make_unique<WifiStream::Impl>(WifiStream::Impl{std::move(connection)}));
+  if (peer) {
+    if (!pairing::constant_time_equal(peer->spki_pin, connection.peer_pin))
+      throw std::runtime_error("the phone identity changed; forget it and pair again");
+  } else {
+    // The phone may have been paired over another transport (USB) under a
+    // different record id; its pinned TLS identity is what authenticates it.
+    const bool trusted = std::any_of(peers.begin(), peers.end(), [&](const WifiPeer& record) {
+      return pairing::constant_time_equal(record.spki_pin, connection.peer_pin);
+    });
+    if (!trusted)
+      throw std::runtime_error("this phone has not been paired with OpenLens yet");
+  }
+  return stream_over(std::move(connection));
+}
+
+PairingResult pair_connected_descriptor(int descriptor, const std::string& device_id,
+                                        const std::string& device_name, WifiIdentityStore& store,
+                                        const PairingConfirmation& confirm) {
+  return pair_over(tls_from_descriptor(descriptor, store), device_id, device_name, store, confirm);
+}
+
+WifiStream connect_stream_descriptor(int descriptor, WifiIdentityStore& store) {
+  auto connection = tls_from_descriptor(descriptor, store);
+  // Descriptor transports (USB) carry no advertised device id, so the phone is
+  // recognised purely by its pinned TLS identity.
+  const auto peers = store.peers();
+  const bool trusted = std::any_of(peers.begin(), peers.end(), [&](const WifiPeer& peer) {
+    return pairing::constant_time_equal(peer.spki_pin, connection.peer_pin);
+  });
+  if (!trusted)
+    throw std::runtime_error("this phone has not been paired with OpenLens yet");
+  return stream_over(std::move(connection));
 }
 
 } // namespace openlens

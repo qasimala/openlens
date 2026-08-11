@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "openlens/session.hpp"
 #include "openlens/sinks.hpp"
+#include "openlens/usb_transport.hpp"
 #include "openlens/wifi_discovery.hpp"
 #include "openlens/wifi_transport.hpp"
 
@@ -28,10 +29,10 @@ void usage() {
             << "Usage:\n"
             << "  openlens doctor [--json]\n"
             << "  openlens devices [--json]\n"
-            << "  openlens pair [--id DEVICE_ID]\n"
+            << "  openlens pair [--id DEVICE_ID] [--usb]\n"
             << "  openlens forget --id DEVICE_ID\n"
-            << "  openlens start [--id DEVICE_ID] [--preset 1080p30|720p30] [camera controls]\n"
-            << "  openlens receive --sink null [--seconds N] [--output FILE] [camera controls]\n"
+            << "  openlens start [--id DEVICE_ID] [--usb] [--preset 1080p30|720p30] [camera controls]\n"
+            << "  openlens receive --sink null [--usb] [--seconds N] [--output FILE] [camera controls]\n"
             << "  openlens synthetic [--video /dev/video42] [--seconds N]\n";
 }
 
@@ -88,11 +89,14 @@ std::vector<openlens::WifiDevice> discover() {
 openlens::WifiDevice choose_device(const std::vector<openlens::WifiDevice>& devices,
                                    const std::optional<std::string>& id, bool require_paired) {
   openlens::WifiIdentityStore identity;
+  // A phone paired over USB is stored under its USB serial; the TLS pin check
+  // at connect time authenticates it, so any stored pairing qualifies here.
+  const bool any_paired = !identity.peers().empty();
   std::optional<openlens::WifiDevice> selected;
   for (const auto& device : devices) {
     if (id && device.device_id != *id)
       continue;
-    if (require_paired && !identity.peer(device.device_id))
+    if (require_paired && !identity.peer(device.device_id).has_value() && !any_paired)
       continue;
     if (selected)
       throw std::runtime_error("more than one matching phone is available; pass --id DEVICE_ID");
@@ -138,6 +142,11 @@ int doctor(bool json) {
 
 int devices(bool json) {
   const auto found = discover();
+  std::vector<openlens::UsbPhone> usb_phones;
+  try {
+    usb_phones = openlens::list_usb_phones();
+  } catch (const std::exception&) {
+  }
   openlens::WifiIdentityStore identity;
   if (json)
     std::cout << "{\"schema\":2,\"devices\":[";
@@ -151,11 +160,28 @@ int devices(bool json) {
                 << ",\"name\":" << json_string(device.service_name)
                 << ",\"address\":" << json_string(device.address)
                 << ",\"port\":" << device.port
+                << ",\"transport\":\"wifi\""
                 << ",\"paired\":" << (paired ? "true" : "false")
                 << ",\"busy\":" << (device.busy ? "true" : "false") << '}';
     } else {
       std::cout << device.service_name << "\t" << device.device_id << "\t" << device.address
                 << ':' << device.port << "\t"
+                << (paired ? "paired" : "not paired") << '\n';
+    }
+  }
+  for (std::size_t index = 0; index < usb_phones.size(); ++index) {
+    const auto& phone = usb_phones[index];
+    const bool paired = identity.peer("usb:" + phone.serial).has_value();
+    if (json) {
+      if (index > 0 || !found.empty())
+        std::cout << ',';
+      std::cout << "{\"id\":" << json_string("usb:" + phone.serial)
+                << ",\"name\":" << json_string(phone.product)
+                << ",\"transport\":\"usb\""
+                << ",\"accessory\":" << (phone.accessory_mode ? "true" : "false")
+                << ",\"paired\":" << (paired ? "true" : "false") << '}';
+    } else {
+      std::cout << phone.product << "\tusb:" << phone.serial << "\tUSB\t"
                 << (paired ? "paired" : "not paired") << '\n';
     }
   }
@@ -165,15 +191,24 @@ int devices(bool json) {
 }
 
 int pair(int argc, char** argv) {
-  const auto device = choose_device(discover(), option(argc, argv, "--id"), false);
   openlens::WifiIdentityStore identity;
-  const auto result = openlens::pair_wifi_device(device, identity, [](std::string_view sas) {
+  const openlens::PairingConfirmation confirm = [](std::string_view sas) {
     std::cout << "\nPairing code: " << sas << "\n"
               << "Confirm the same code on the phone, then type yes here: " << std::flush;
     std::string answer;
     std::getline(std::cin, answer);
     return answer == "yes" || answer == "y";
-  });
+  };
+  if (flag(argc, argv, "--usb")) {
+    std::cout << "Connecting to the phone over USB…\n";
+    auto link = openlens::UsbAccessoryLink::open();
+    const auto result = openlens::pair_connected_descriptor(
+        link.release_descriptor(), "usb:" + link.serial(), link.product(), identity, confirm);
+    std::cout << "Paired with " << result.peer.name << " over USB.\n";
+    return 0;
+  }
+  const auto device = choose_device(discover(), option(argc, argv, "--id"), false);
+  const auto result = openlens::pair_wifi_device(device, identity, confirm);
   std::cout << "Paired with " << result.peer.name << ".\n";
   return 0;
 }
@@ -189,7 +224,9 @@ int forget(int argc, char** argv) {
 
 int run_session(int argc, char** argv, bool v4l2) {
   openlens::SessionOptions options;
-  options.wifi_device = choose_device(discover(), option(argc, argv, "--id"), true);
+  options.usb = flag(argc, argv, "--usb");
+  if (!options.usb)
+    options.wifi_device = choose_device(discover(), option(argc, argv, "--id"), true);
   options.preset = option(argc, argv, "--preset").value_or("1080p30");
   if (options.preset != "1080p30" && options.preset != "720p30")
     throw std::runtime_error("--preset must be 1080p30 or 720p30");
@@ -208,7 +245,8 @@ int run_session(int argc, char** argv, bool v4l2) {
       v4l2 ? std::unique_ptr<openlens::FrameSink>(
                  std::make_unique<openlens::V4l2Sink>(options.video_device))
            : std::unique_ptr<openlens::FrameSink>(std::make_unique<openlens::NullSink>());
-  std::cout << "Starting the paired phone camera over private local Wi-Fi.\n";
+  std::cout << (options.usb ? "Starting the paired phone camera over USB.\n"
+                            : "Starting the paired phone camera over private local Wi-Fi.\n");
   const auto stats = openlens::OpenLensSession(options).run(*sink, cancelled);
   std::cout << "frames=" << stats.frames << " messages=" << stats.messages
             << " sequence_gaps=" << stats.sequence_gaps << " decode_errors=" << stats.decode_errors
@@ -238,6 +276,8 @@ int synthetic(int argc, char** argv) {
 int main(int argc, char** argv) {
   std::signal(SIGINT, stop);
   std::signal(SIGTERM, stop);
+  // Transport writes can race a peer disconnect; the error path handles EPIPE.
+  std::signal(SIGPIPE, SIG_IGN);
   try {
     if (argc < 2) {
       usage();

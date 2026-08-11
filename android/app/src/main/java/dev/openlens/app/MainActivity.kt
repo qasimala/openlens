@@ -73,6 +73,7 @@ private val Danger = Color(0xFFFF887C)
 class MainActivity : ComponentActivity() {
     private var permissionGranted by mutableStateOf(false)
     private var wifiHost: WifiHostController? = null
+    private var usbHost: UsbAccessoryController? = null
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permissionGranted = granted
         refreshStatus()
@@ -81,14 +82,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         permissionGranted = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        wifiHost = WifiHostController(this).also(WifiHostController::start)
+        val host = WifiHostController(this).also(WifiHostController::start)
+        wifiHost = host
+        usbHost = UsbAccessoryController(this, host).also(UsbAccessoryController::start)
+        handleAccessoryIntent(intent)
         refreshStatus()
         setContent {
             var snapshot by remember { mutableStateOf(currentSnapshot()) }
+            var wifi by remember { mutableStateOf(WifiHostStatus.snapshot) }
+            var pairing by remember { mutableStateOf(WifiPairingStatus.snapshot) }
             var settings by remember { mutableStateOf(OpenLensPreferences.load(this)) }
             LaunchedEffect(Unit) {
                 while (true) {
                     snapshot = currentSnapshot()
+                    wifi = WifiHostStatus.snapshot
+                    pairing = WifiPairingStatus.snapshot
                     delay(250)
                 }
             }
@@ -101,8 +109,8 @@ class MainActivity : ComponentActivity() {
             }
             OpenLensScreen(
                 snapshot = snapshot,
-                wifi = WifiHostStatus.snapshot,
-                pairing = WifiPairingStatus.snapshot,
+                wifi = wifi,
+                pairing = pairing,
                 settings = settings,
                 onSettings = { updated ->
                     settings = updated
@@ -120,7 +128,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleAccessoryIntent(intent)
+    }
+
+    private fun handleAccessoryIntent(intent: android.content.Intent?) {
+        if (intent?.action != android.hardware.usb.UsbManager.ACTION_USB_ACCESSORY_ATTACHED) return
+        val accessory = androidx.core.content.IntentCompat.getParcelableExtra(
+            intent,
+            android.hardware.usb.UsbManager.EXTRA_ACCESSORY,
+            android.hardware.usb.UsbAccessory::class.java,
+        )
+        accessory?.let { usbHost?.attach(it) }
+    }
+
     override fun onDestroy() {
+        usbHost?.close()
+        usbHost = null
         wifiHost?.close()
         wifiHost = null
         super.onDestroy()

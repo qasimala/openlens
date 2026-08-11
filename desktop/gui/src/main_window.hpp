@@ -32,6 +32,7 @@ struct DeviceInfo {
   bool appInstalled{};
   bool locked{};
   bool wifi{};
+  bool usb{};
   bool paired{};
   openlens::WifiDevice wifiDevice;
 };
@@ -86,6 +87,7 @@ private slots:
   void toggleSession();
   void stopSession();
   void installObsPlugin();
+  void showAndroidInstall();
   void openObs();
 
 private:
@@ -117,7 +119,9 @@ private:
   std::atomic_bool cancelled_{false};
   std::thread worker_;
   std::unique_ptr<DesktopSink> sink_;
+  std::unique_ptr<QObject> apkServer_;
   bool streaming_{};
+  bool quitting_{};
 
   void buildInterface();
   void loadSettings();
@@ -132,4 +136,5 @@ private:
   [[nodiscard]] static Readiness inspectSystem(const QString& selectedSerial);
   [[nodiscard]] static QString obsPluginPath();
   [[nodiscard]] static QString findBundledPlugin();
+  [[nodiscard]] static QString findBundledApk();
 };

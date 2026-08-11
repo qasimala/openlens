@@ -14,6 +14,8 @@ namespace openlens {
 
 struct SessionOptions {
   std::optional<WifiDevice> wifi_device;
+  // Stream over the USB accessory link instead of Wi-Fi.
+  bool usb{};
   std::string preset{"1080p30"};
   std::string facing{"back"};
   int bitrate{};

@@ -3,6 +3,7 @@
 
 #include "openlens/media.hpp"
 #include "openlens/protocol.hpp"
+#include "openlens/usb_transport.hpp"
 #include "openlens/wifi_discovery.hpp"
 #include "openlens/wifi_transport.hpp"
 
@@ -21,6 +22,8 @@ namespace {
 class ActiveConnection {
 public:
   std::optional<WifiStream> wifi;
+  // Keeps the USB accessory pumps alive while the stream uses the bridge.
+  std::optional<UsbAccessoryLink> usb_link;
 
   [[nodiscard]] std::ptrdiff_t read(std::span<std::byte> buffer) {
     if (wifi)
@@ -41,8 +44,16 @@ public:
       wifi->close();
       wifi.reset();
     }
+    usb_link.reset();
   }
 };
+
+void open_usb_connection(ActiveConnection& connection, WifiIdentityStore& store) {
+  auto link = UsbAccessoryLink::open();
+  const int descriptor = link.release_descriptor();
+  connection.usb_link.emplace(std::move(link));
+  connection.wifi.emplace(connect_stream_descriptor(descriptor, store));
+}
 
 protocol::Message metadata(protocol::MessageType type, std::uint64_t sequence, std::string json) {
   protocol::Message message;
@@ -60,28 +71,33 @@ OpenLensSession::OpenLensSession(SessionOptions options) : options_(std::move(op
 
 SessionStats OpenLensSession::run(FrameSink& sink, std::atomic_bool& cancelled) {
   auto wifi_store = std::make_unique<WifiIdentityStore>();
-  if (!options_.wifi_device) {
-    const auto devices = discover_wifi_devices(std::chrono::milliseconds(1500));
-    for (const auto& device : devices) {
-      if (!wifi_store->peer(device.device_id))
-        continue;
-      if (options_.wifi_device)
-        throw std::runtime_error("multiple paired phones are available; select one in OpenLens");
-      options_.wifi_device = device;
-    }
-    if (!options_.wifi_device)
-      throw std::runtime_error("no paired OpenLens phone was found on local Wi-Fi");
-  }
   ActiveConnection connection;
-  connection.wifi.emplace(connect_wifi_stream(*options_.wifi_device, *wifi_store));
+  if (options_.usb) {
+    open_usb_connection(connection, *wifi_store);
+  } else {
+    if (!options_.wifi_device) {
+      const auto devices = discover_wifi_devices(std::chrono::milliseconds(1500));
+      const bool any_paired = !wifi_store->peers().empty();
+      for (const auto& device : devices) {
+        if (!wifi_store->peer(device.device_id).has_value() && !any_paired)
+          continue;
+        if (options_.wifi_device)
+          throw std::runtime_error("multiple paired phones are available; select one in OpenLens");
+        options_.wifi_device = device;
+      }
+      if (!options_.wifi_device)
+        throw std::runtime_error("no paired OpenLens phone was found on local Wi-Fi");
+    }
+    connection.wifi.emplace(connect_wifi_stream(*options_.wifi_device, *wifi_store));
+  }
 
   std::ofstream encoded;
   if (!options_.encoded_output.empty())
     encoded.open(options_.encoded_output, std::ios::binary);
   std::uint64_t desktop_sequence = 1;
-  connection.send(
-      metadata(protocol::MessageType::Hello, desktop_sequence++,
-               R"({"schema":1,"client":"desktop","version":"0.2.0","transport":"wifi"})"));
+  connection.send(metadata(protocol::MessageType::Hello, desktop_sequence++,
+                           std::string(R"({"schema":1,"client":"desktop","version":"0.2.0")") +
+                               R"(,"transport":")" + (options_.usb ? "usb" : "wifi") + "\"}"));
 
   protocol::StreamParser parser;
   H264Decoder decoder;
@@ -121,16 +137,22 @@ SessionStats OpenLensSession::run(FrameSink& sink, std::atomic_bool& cancelled) 
       bool ready = false;
       while (!cancelled && std::chrono::steady_clock::now() < reconnect_deadline) {
         try {
-          const auto devices = discover_wifi_devices(std::chrono::milliseconds(700));
-          const auto wanted =
-              std::find_if(devices.begin(), devices.end(), [&](const WifiDevice& device) {
-                return device.device_id == options_.wifi_device->device_id;
-              });
-          if (wanted != devices.end()) {
-            options_.wifi_device = *wanted;
-            connection.wifi.emplace(connect_wifi_stream(*wanted, *wifi_store));
+          if (options_.usb) {
+            open_usb_connection(connection, *wifi_store);
             ready = true;
             last_receive = std::chrono::steady_clock::now();
+          } else {
+            const auto devices = discover_wifi_devices(std::chrono::milliseconds(700));
+            const auto wanted =
+                std::find_if(devices.begin(), devices.end(), [&](const WifiDevice& device) {
+                  return device.device_id == options_.wifi_device->device_id;
+                });
+            if (wanted != devices.end()) {
+              options_.wifi_device = *wanted;
+              connection.wifi.emplace(connect_wifi_stream(*wanted, *wifi_store));
+              ready = true;
+              last_receive = std::chrono::steady_clock::now();
+            }
           }
           if (ready)
             connection.send(metadata(protocol::MessageType::Hello, desktop_sequence++,

@@ -47,6 +47,8 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     private var output: OutputStream? = null
     private var camera: CameraEngine? = null
     private var encoder: AvcEncoder? = null
+    private var encoderSurface: android.view.Surface? = null
+    private val cameraRestartPending = AtomicBoolean(false)
     private var streamId = 1L
     private var requestedPreset: VideoPreset = CertifiedPresets.FULL_HD_1080P30
     private var facing: Facing = Facing.BACK
@@ -60,6 +62,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
+        PreviewSurfaceRegistry.listener = ::schedulePreviewRestart
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Camera streaming", NotificationManager.IMPORTANCE_LOW),
         )
@@ -136,6 +139,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
             camera = null
             encoder?.close()
             encoder = null
+            encoderSurface = null
             runCatching { connection.close() }
             output = null
             client = null
@@ -201,6 +205,41 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
         }
     }
 
+    /**
+     * The preview TextureView is destroyed and recreated when the phone rotates (the layout
+     * switches between portrait and landscape). Its Surface is an output of the running capture
+     * session, and continuing to target the released Surface stalls frame delivery, so the
+     * camera session must be rebuilt with the current surfaces. The encoder and the desktop
+     * connection stay untouched.
+     */
+    private fun schedulePreviewRestart() {
+        if (camera == null || !running.get()) return
+        if (!cameraRestartPending.compareAndSet(false, true)) return
+        thread(name = "OpenLensPreviewRestart") {
+            Thread.sleep(300) // rotation destroys then recreates the surface; coalesce the pair
+            cameraRestartPending.set(false)
+            restartCameraOutputs()
+        }
+    }
+
+    @Synchronized
+    private fun restartCameraOutputs() {
+        val surface = encoderSurface ?: return
+        if (!running.get() || camera == null) return
+        camera?.close()
+        val surfaces = buildList {
+            add(surface)
+            PreviewSurfaceRegistry.surface?.takeIf { it.isValid }?.let(::add)
+        }
+        val newCamera = CameraEngine(this, this)
+        camera = newCamera
+        runCatching {
+            newCamera.start(facing, requestedPreset, surfaces)
+            encoder?.requestKeyframe()
+        }.onFailure(::onCameraError)
+    }
+
+    @Synchronized
     private fun startCapture(preset: VideoPreset) {
         camera?.close()
         encoder?.close()
@@ -213,7 +252,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
         streamId += 1
         val newEncoder = AvcEncoder(this)
         encoder = newEncoder
-        val encoderSurface = newEncoder.start(
+        val newSurface = newEncoder.start(
             EncoderConfig(
                 requestedPreset.width,
                 requestedPreset.height,
@@ -221,8 +260,9 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
                 requestedPreset.bitrate,
             ),
         )
+        encoderSurface = newSurface
         val surfaces = buildList {
-            add(encoderSurface)
+            add(newSurface)
             PreviewSurfaceRegistry.surface?.takeIf { it.isValid }?.let(::add)
         }
         val newCamera = CameraEngine(this, this)
@@ -400,11 +440,13 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     override fun onDestroy() {
         running.set(false)
         connectionActive.set(false)
+        if (activeInstance === this) PreviewSurfaceRegistry.listener = null
         queue.offer(WireMessage(WireHeader(type = MessageType.END_STREAM.wireValue)))
         camera?.close()
         camera = null
         encoder?.close()
         encoder = null
+        encoderSurface = null
         runCatching { client?.close() }
         output = null
         client = null

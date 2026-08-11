@@ -48,6 +48,10 @@ struct PairingResult {
 
 class WifiStream {
 public:
+  // Impl is defined only inside the transport implementation; the public
+  // constructor exists so transports sharing the TLS layer can build streams.
+  struct Impl;
+  explicit WifiStream(std::unique_ptr<Impl> implementation);
   WifiStream(WifiStream&&) noexcept;
   WifiStream& operator=(WifiStream&&) noexcept;
   WifiStream(const WifiStream&) = delete;
@@ -59,11 +63,7 @@ public:
   void close() noexcept;
 
 private:
-  struct Impl;
-  explicit WifiStream(std::unique_ptr<Impl> implementation);
   std::unique_ptr<Impl> implementation_;
-  friend WifiStream connect_wifi_stream(const WifiDevice&, WifiIdentityStore&,
-                                        std::chrono::milliseconds);
 };
 
 using PairingConfirmation = std::function<bool(std::string_view sas)>;
@@ -75,5 +75,16 @@ pair_wifi_device(const WifiDevice& device, WifiIdentityStore& store,
 [[nodiscard]] WifiStream
 connect_wifi_stream(const WifiDevice& device, WifiIdentityStore& store,
                     std::chrono::milliseconds timeout = std::chrono::seconds(10));
+
+// Run the same TLS + pairing exchange over an already-connected stream
+// descriptor (used by the USB accessory transport). Takes ownership of the
+// descriptor in both success and failure.
+[[nodiscard]] PairingResult
+pair_connected_descriptor(int descriptor, const std::string& device_id,
+                          const std::string& device_name, WifiIdentityStore& store,
+                          const PairingConfirmation& confirm);
+// Open a camera stream over an already-connected descriptor. The phone is
+// authenticated by matching its TLS identity against any stored peer pin.
+[[nodiscard]] WifiStream connect_stream_descriptor(int descriptor, WifiIdentityStore& store);
 
 } // namespace openlens

@@ -2,6 +2,8 @@
 #include "main_window.hpp"
 
 #include <QApplication>
+
+#include <csignal>
 #include <QColor>
 #include <QIcon>
 #include <QPainter>
@@ -28,6 +30,8 @@ QIcon appIcon() {
 } // namespace
 
 int main(int argc, char* argv[]) {
+  // Transport writes can race a peer disconnect; the error path handles EPIPE.
+  std::signal(SIGPIPE, SIG_IGN);
   QApplication application(argc, argv);
   QApplication::setApplicationName("OpenLens Desktop");
   QApplication::setApplicationDisplayName("OpenLens");
