@@ -36,4 +36,9 @@ private:
 [[nodiscard]] VideoFrame transform_frame(const VideoFrame& input, int rotation_degrees,
                                          bool mirror_horizontal);
 
+// Scales the frame to fit inside a fixed canvas, preserving aspect ratio and
+// centering it on black bars. Used when live phone rotation changes the frame
+// shape while the virtual camera format must stay constant.
+[[nodiscard]] VideoFrame fit_frame(const VideoFrame& input, int canvas_width, int canvas_height);
+
 } // namespace openlens

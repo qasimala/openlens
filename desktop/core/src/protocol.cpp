@@ -43,7 +43,7 @@ template <typename Value>
 
 bool is_known_type(std::uint16_t type) noexcept {
   return type >= static_cast<std::uint16_t>(MessageType::Hello) &&
-         type <= static_cast<std::uint16_t>(MessageType::EndStream);
+         type <= static_cast<std::uint16_t>(MessageType::Orientation);
 }
 
 bool is_metadata_type(std::uint16_t type) noexcept {

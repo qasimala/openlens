@@ -51,6 +51,7 @@ public:
   DesktopSink(std::string device, bool mirror, int rotation, QObject* parent = nullptr);
   void configure(int width, int height, int fps) override;
   void push(const openlens::VideoFrame& frame) override;
+  void orientation(int degrees) override;
   void placeholder(std::string_view message) override;
   void flush() override;
   void stop() override;
@@ -64,6 +65,9 @@ private:
   std::unique_ptr<openlens::V4l2Sink> output_;
   bool mirror_{};
   int rotation_{};
+  std::atomic_int phoneRotation_{0};
+  int canvasWidth_{};
+  int canvasHeight_{};
   std::uint64_t frames_{};
   std::chrono::steady_clock::time_point started_;
 

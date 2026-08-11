@@ -50,6 +50,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <stdexcept>
 #include <utility>
@@ -208,8 +209,19 @@ void DesktopSink::configure(int width, int height, int fps) {
     output_->configure(width, height, fps);
 }
 
+void DesktopSink::orientation(int degrees) { phoneRotation_.store(degrees); }
+
 void DesktopSink::push(const openlens::VideoFrame& frame) {
-  auto transformed = openlens::transform_frame(frame, rotation_, mirror_);
+  const int total = ((rotation_ + phoneRotation_.load()) % 360 + 360) % 360;
+  auto transformed = openlens::transform_frame(frame, total, mirror_);
+  // The virtual camera format must not change mid-stream, so the first frame
+  // fixes the canvas and later rotations are letterboxed into it.
+  if (canvasWidth_ == 0) {
+    canvasWidth_ = transformed.width;
+    canvasHeight_ = transformed.height;
+  }
+  if (transformed.width != canvasWidth_ || transformed.height != canvasHeight_)
+    transformed = openlens::fit_frame(transformed, canvasWidth_, canvasHeight_);
   output_->push(transformed);
   ++frames_;
   if (frames_ % 3U == 0U)
@@ -534,6 +546,10 @@ Readiness MainWindow::inspectSystem(const QString&) {
   result.obsPluginReady = QFileInfo::exists(obsPluginPath());
   try {
     openlens::WifiIdentityStore identity;
+    // Pairing may be recorded under another transport's id (a USB serial);
+    // the pinned TLS identity authenticates the phone at connect time, so any
+    // stored pairing counts as paired here.
+    const bool anyPaired = !identity.peers().empty();
     for (const auto& found : openlens::discover_wifi_devices(std::chrono::milliseconds(900))) {
       DeviceInfo device;
       device.key = QStringLiteral("wifi:") + QString::fromStdString(found.device_id);
@@ -541,7 +557,7 @@ Readiness MainWindow::inspectSystem(const QString&) {
       device.state = found.busy ? QStringLiteral("busy") : QStringLiteral("device");
       device.appInstalled = true;
       device.wifi = true;
-      device.paired = identity.peer(found.device_id).has_value();
+      device.paired = identity.peer(found.device_id).has_value() || anyPaired;
       device.wifiDevice = found;
       result.devices.push_back(std::move(device));
     }
@@ -819,6 +835,7 @@ void MainWindow::toggleSession() {
     } catch (const std::exception& exception) {
       if (!cancelled_)
         error = QString::fromUtf8(exception.what());
+      std::fprintf(stderr, "openlens-desktop: session ended: %s\n", exception.what());
     }
     QMetaObject::invokeMethod(
         this,

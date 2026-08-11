@@ -95,8 +95,9 @@ class UsbAccessoryController(context: Context, private val host: WifiHostControl
         }
         if (!serving.compareAndSet(false, true)) return
         thread(name = "OpenLensUsbSession") {
+            var opened = false
             try {
-                serve(accessory)
+                opened = serve(accessory)
             } catch (error: Throwable) {
                 Log.e(TAG, "USB session failed", error)
                 UsbHostStatus.snapshot =
@@ -104,18 +105,19 @@ class UsbAccessoryController(context: Context, private val host: WifiHostControl
             } finally {
                 serving.set(false)
             }
-            // The desktop opens a fresh connection per request (pair, then stream),
-            // so keep serving while the accessory stays attached.
-            if (!closed.get()) {
+            // Only re-serve after a session that actually opened; when the
+            // accessory cannot be opened the session is dead until the bus
+            // re-enumerates, which arrives as a fresh attach intent.
+            if (opened && !closed.get()) {
                 Thread.sleep(1_000)
                 usbManager.accessoryList?.firstOrNull { it.isOpenLensDesktop() }?.let(::attach)
             }
         }
     }
 
-    private fun serve(accessory: UsbAccessory) {
+    private fun serve(accessory: UsbAccessory): Boolean {
         val descriptor: ParcelFileDescriptor = usbManager.openAccessory(accessory)
-            ?: error("Could not open the USB connection to the computer.")
+            ?: return false
         // The accessory file descriptor must stay open across desktop
         // connections: closing it ends the accessory session until the bus
         // re-enumerates. One open descriptor serves sync-separated sessions.
@@ -132,6 +134,7 @@ class UsbAccessoryController(context: Context, private val host: WifiHostControl
             }
         }
         UsbHostStatus.snapshot = UsbHostSnapshot(detail = "USB cable disconnected.")
+        return true
     }
 
     private fun runOneSession(accessoryInput: FileInputStream, accessoryOutput: FileOutputStream) {

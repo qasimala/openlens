@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <optional>
@@ -126,6 +127,8 @@ SessionStats OpenLensSession::run(FrameSink& sink, std::atomic_bool& cancelled) 
       }
     }
     if (disconnected) {
+      std::fprintf(stderr, "openlens-session: disconnected (read=%td errno=%d) after %llu frames\n",
+                   count, errno, static_cast<unsigned long long>(stats.frames));
       connection.close();
       sink.placeholder("Phone disconnected—waiting for the same device");
       sink.flush();
@@ -157,7 +160,8 @@ SessionStats OpenLensSession::run(FrameSink& sink, std::atomic_bool& cancelled) 
           if (ready)
             connection.send(metadata(protocol::MessageType::Hello, desktop_sequence++,
                                      R"({"schema":1,"client":"desktop","version":"0.2.0"})"));
-        } catch (const std::exception&) {
+        } catch (const std::exception& failure) {
+          std::fprintf(stderr, "openlens-session: reconnect attempt failed: %s\n", failure.what());
         }
         if (ready)
           break;
@@ -219,6 +223,18 @@ SessionStats OpenLensSession::run(FrameSink& sink, std::atomic_bool& cancelled) 
           }
         } catch (const std::exception&) {
           ++stats.decode_errors;
+        }
+      } else if (type == protocol::MessageType::Orientation) {
+        const std::string json(reinterpret_cast<const char*>(message.payload.data()),
+                               message.payload.size());
+        const auto key = json.find("\"rotation\"");
+        const auto colon = key == std::string::npos ? key : json.find(':', key);
+        if (colon != std::string::npos) {
+          const int rotation = std::atoi(json.c_str() + colon + 1);
+          if (rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270) {
+            std::fprintf(stderr, "openlens-session: phone orientation %d\n", rotation);
+            sink.orientation(rotation);
+          }
         }
       } else if (type == protocol::MessageType::EndStream) {
         cancelled = true;

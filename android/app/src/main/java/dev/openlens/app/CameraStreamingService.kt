@@ -8,7 +8,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.display.DisplayManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.view.Display
+import android.view.Surface
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import dev.openlens.camera.CameraEngine
 import dev.openlens.camera.CameraControlState
@@ -53,6 +59,18 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     private var requestedPreset: VideoPreset = CertifiedPresets.FULL_HD_1080P30
     private var facing: Facing = Facing.BACK
     private var controls = CameraControlState()
+    @Volatile
+    private var sensorOrientation = 0
+    @Volatile
+    private var lastSentRotation = -1
+    private val displayManager by lazy { getSystemService(DisplayManager::class.java) }
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId == Display.DEFAULT_DISPLAY) sendOrientation()
+        }
+    }
     private var frames = 0L
     private var bytes = 0L
     private var dropped = 0L
@@ -63,6 +81,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
         super.onCreate()
         activeInstance = this
         PreviewSurfaceRegistry.listener = ::schedulePreviewRestart
+        displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Camera streaming", NotificationManager.IMPORTANCE_LOW),
         )
@@ -113,6 +132,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     private fun serveConnection(input: InputStream, destination: OutputStream, connection: Closeable, transport: String) {
         client = connection
         output = destination
+        lastSentRotation = -1
         connectionActive.set(true)
         queue.clear()
         val writer = thread(name = "OpenLensWriter") { writerLoop() }
@@ -131,7 +151,11 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
                     }
                 }
             }
+        } catch (error: Throwable) {
+            Log.e(TAG, "stream session failed", error)
+            throw error
         } finally {
+            Log.i(TAG, "stream session closing")
             connectionActive.set(false)
             writer.interrupt()
             writer.join(2_000)
@@ -201,7 +225,10 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
                     ),
                 )
             }
-            MessageType.END_STREAM.wireValue -> stopSelf()
+            MessageType.END_STREAM.wireValue -> {
+                Log.i(TAG, "desktop requested end of stream")
+                stopSelf()
+            }
         }
     }
 
@@ -272,6 +299,8 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     }
 
     override fun onCameraStarted(summary: CameraSummary) {
+        sensorOrientation = summary.sensorOrientation
+        sendOrientation(force = true)
         controls = camera?.setControls(controls) ?: controls
         SessionStatus.snapshot = SessionStatus.snapshot.copy(
             facing = summary.facing.name.lowercase(),
@@ -288,6 +317,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     }
 
     override fun onCameraError(error: Throwable) {
+        Log.e(TAG, "camera error", error)
         sendMetadata(MessageType.ERROR, """{"schema":1,"code":"camera","reason":${error.message.jsonString()}}""")
         publish(SessionState.ERROR, error.message ?: "Camera failed.")
         stopSelf()
@@ -327,6 +357,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     }
 
     override fun onEncoderError(error: Throwable) {
+        Log.e(TAG, "encoder error", error)
         sendMetadata(MessageType.ERROR, """{"schema":1,"code":"encoder","reason":${error.message.jsonString()}}""")
         publish(SessionState.ERROR, error.message ?: "Encoder failed.")
         stopSelf()
@@ -379,6 +410,29 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
             """{"id":${cameraSummary.id.jsonString()},"facing":${cameraSummary.facing.name.lowercase().jsonString()},"zoomMin":${cameraSummary.zoomMinimum},"zoomMax":${cameraSummary.zoomMaximum},"torch":${cameraSummary.supportsTorch},"sensorOrientation":${cameraSummary.sensorOrientation},"presets":[${cameraSummary.presets.joinToString(",") { it.label.jsonString() }}]}"""
         }
         return """{"schema":1,"cameras":[$cameras]}"""
+    }
+
+    /**
+     * Tells the desktop how many degrees clockwise the encoded frames must be
+     * rotated to appear upright, derived from the camera sensor mounting and
+     * the current device orientation.
+     */
+    private fun sendOrientation(force: Boolean = false) {
+        if (!connectionActive.get() || output == null) return
+        val device = when (displayManager.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: Surface.ROTATION_0) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        val upright = if (facing == Facing.FRONT) {
+            (sensorOrientation + device) % 360
+        } else {
+            (sensorOrientation - device + 360) % 360
+        }
+        if (!force && upright == lastSentRotation) return
+        lastSentRotation = upright
+        runCatching { sendMetadata(MessageType.ORIENTATION, """{"schema":1,"rotation":$upright}""", 0) }
     }
 
     private fun publishStats() {
@@ -438,6 +492,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     }
 
     override fun onDestroy() {
+        runCatching { displayManager.unregisterDisplayListener(displayListener) }
         running.set(false)
         connectionActive.set(false)
         if (activeInstance === this) PreviewSurfaceRegistry.listener = null
@@ -456,6 +511,7 @@ class CameraStreamingService : Service(), CameraListener, EncoderListener {
     }
 
     companion object {
+        private const val TAG = "OpenLensStream"
         const val ACTION_STOP = "dev.openlens.app.STOP"
         const val ACTION_WIFI = "dev.openlens.app.WIFI"
         private const val CHANNEL_ID = "openlens_camera"

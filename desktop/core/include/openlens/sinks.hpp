@@ -14,6 +14,9 @@ public:
   virtual ~FrameSink() = default;
   virtual void configure(int width, int height, int fps) = 0;
   virtual void push(const VideoFrame& frame) = 0;
+  // The phone reports how many degrees clockwise its frames need to appear
+  // upright; sinks that render for people can honour it, others ignore it.
+  virtual void orientation(int) {}
   virtual void placeholder(std::string_view message) = 0;
   virtual void flush() = 0;
   virtual void stop() = 0;

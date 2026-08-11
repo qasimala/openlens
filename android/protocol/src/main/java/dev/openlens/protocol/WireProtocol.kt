@@ -29,6 +29,7 @@ enum class MessageType(val wireValue: Int) {
     PONG(12),
     ERROR(13),
     END_STREAM(14),
+    ORIENTATION(15),
     ;
 
     companion object {

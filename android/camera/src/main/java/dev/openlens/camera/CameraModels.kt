@@ -79,8 +79,13 @@ class CameraEngine(context: Context, private val listener: CameraListener) : Aut
         }
         check(device == null) { "camera already started" }
         require(surfaces.isNotEmpty()) { "camera requires an output surface" }
-        val selected = enumerate().firstOrNull { it.facing == facing && CertifiedPresets.choose(preset, it.presets) == preset }
-            ?: throw IllegalArgumentException("${preset.label} is unavailable on the selected camera")
+        // Match on resolution and frame rate only: the requested preset carries a
+        // negotiated bitrate, an encoder concern the camera preset list knows nothing about.
+        val selected = enumerate().firstOrNull { candidate ->
+            candidate.facing == facing && candidate.presets.any {
+                it.width == preset.width && it.height == preset.height && it.fps == preset.fps
+            }
+        } ?: throw IllegalArgumentException("${preset.label} is unavailable on the selected camera")
         val worker = HandlerThread("OpenLensCamera").also(HandlerThread::start)
         thread = worker
         handler = Handler(worker.looper)

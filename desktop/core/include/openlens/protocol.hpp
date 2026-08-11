@@ -36,6 +36,7 @@ enum class MessageType : std::uint16_t {
   Pong = 12,
   Error = 13,
   EndStream = 14,
+  Orientation = 15,
 };
 
 enum class Flag : std::uint16_t {

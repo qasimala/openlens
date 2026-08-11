@@ -148,11 +148,14 @@ int devices(bool json) {
   } catch (const std::exception&) {
   }
   openlens::WifiIdentityStore identity;
+  // Pairing may be recorded under another transport's id; any stored pairing
+  // counts because the pinned TLS identity authenticates at connect time.
+  const bool any_paired = !identity.peers().empty();
   if (json)
     std::cout << "{\"schema\":2,\"devices\":[";
   for (std::size_t index = 0; index < found.size(); ++index) {
     const auto& device = found[index];
-    const bool paired = identity.peer(device.device_id).has_value();
+    const bool paired = identity.peer(device.device_id).has_value() || any_paired;
     if (json) {
       if (index > 0)
         std::cout << ',';
@@ -171,7 +174,7 @@ int devices(bool json) {
   }
   for (std::size_t index = 0; index < usb_phones.size(); ++index) {
     const auto& phone = usb_phones[index];
-    const bool paired = identity.peer("usb:" + phone.serial).has_value();
+    const bool paired = identity.peer("usb:" + phone.serial).has_value() || any_paired;
     if (json) {
       if (index > 0 || !found.empty())
         std::cout << ',';

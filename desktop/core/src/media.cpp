@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "openlens/media.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 extern "C" {
@@ -139,6 +140,55 @@ VideoFrame transform_frame(const VideoFrame& input, int rotation_degrees, bool m
                   output.i420.data() + y_size, rotation_degrees, mirror_horizontal);
   transform_plane(input.i420.data() + y_size * 5U / 4U, input.width / 2, input.height / 2,
                   output.i420.data() + y_size * 5U / 4U, rotation_degrees, mirror_horizontal);
+  return output;
+}
+
+VideoFrame fit_frame(const VideoFrame& input, int canvas_width, int canvas_height) {
+  if (canvas_width <= 0 || canvas_height <= 0 ||
+      (input.width == canvas_width && input.height == canvas_height))
+    return input;
+  const double scale = std::min(static_cast<double>(canvas_width) / input.width,
+                                static_cast<double>(canvas_height) / input.height);
+  const int scaled_width =
+      std::max(2, static_cast<int>(static_cast<double>(input.width) * scale) & ~1);
+  const int scaled_height =
+      std::max(2, static_cast<int>(static_cast<double>(input.height) * scale) & ~1);
+  const int offset_x = ((canvas_width - scaled_width) / 2) & ~1;
+  const int offset_y = ((canvas_height - scaled_height) / 2) & ~1;
+
+  VideoFrame output;
+  output.width = canvas_width;
+  output.height = canvas_height;
+  output.pts_us = input.pts_us;
+  output.discontinuity = input.discontinuity;
+  const std::size_t canvas_y_size =
+      static_cast<std::size_t>(canvas_width) * static_cast<std::size_t>(canvas_height);
+  output.i420.assign(canvas_y_size * 3U / 2U, 128);
+  std::fill_n(output.i420.begin(), canvas_y_size, static_cast<std::uint8_t>(0));
+
+  SwsContext* scaler =
+      sws_getContext(input.width, input.height, AV_PIX_FMT_YUV420P, scaled_width, scaled_height,
+                     AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr, nullptr);
+  if (scaler == nullptr)
+    throw std::runtime_error("could not create the frame scaler");
+  const std::size_t input_y_size =
+      static_cast<std::size_t>(input.width) * static_cast<std::size_t>(input.height);
+  const std::uint8_t* source_planes[3] = {input.i420.data(), input.i420.data() + input_y_size,
+                                          input.i420.data() + input_y_size * 5U / 4U};
+  const int source_strides[3] = {input.width, input.width / 2, input.width / 2};
+  const auto luma_offset = static_cast<std::size_t>(offset_y) * static_cast<std::size_t>(canvas_width) +
+                           static_cast<std::size_t>(offset_x);
+  const auto chroma_offset =
+      static_cast<std::size_t>(offset_y / 2) * static_cast<std::size_t>(canvas_width / 2) +
+      static_cast<std::size_t>(offset_x / 2);
+  std::uint8_t* destination_planes[3] = {output.i420.data() + luma_offset,
+                                         output.i420.data() + canvas_y_size + chroma_offset,
+                                         output.i420.data() + canvas_y_size * 5U / 4U +
+                                             chroma_offset};
+  const int destination_strides[3] = {canvas_width, canvas_width / 2, canvas_width / 2};
+  sws_scale(scaler, source_planes, source_strides, 0, input.height, destination_planes,
+            destination_strides);
+  sws_freeContext(scaler);
   return output;
 }
 
